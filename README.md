@@ -19,6 +19,120 @@ A comprehensive command-line tool for benchmarking API providers with advanced m
 - `.env` file with provider port configurations (see Environment Setup)
 - Target API providers must be running and accessible
 
+## Setting Up Bifrost for Benchmarking
+
+Bifrost serves as a high-performance HTTP API gateway that provides seamless connections to various AI providers like OpenAI, Anthropic, and AWS Bedrock. This section covers the complete setup process for optimal benchmarking performance.
+
+### 1. Install Bifrost
+
+#### Option A: Using NPX (Recommended for Quick Start)
+
+```bash
+npx -y @maximhq/bifrost
+```
+
+This command downloads and runs the latest version of Bifrost instantly without requiring a separate installation.
+
+#### Option B: Using Docker
+
+```bash
+# Pull the Bifrost image
+docker pull maximhq/bifrost
+
+# Run Bifrost with port mapping
+docker run -p 8080:8080 maximhq/bifrost
+
+# For persistent configuration across restarts
+docker run -p 8080:8080 -v $(pwd)/data:/app/data maximhq/bifrost
+```
+
+After installation, Bifrost will be accessible at `http://localhost:8080` with a web-based management interface.
+
+📖 **For detailed installation instructions:** [Bifrost Setup Guide](https://docs.getbifrost.ai/quickstart/gateway/setting-up)
+
+### 2. Run the Mock Server (Optional - For Testing Without External APIs)
+
+If you want to test without making actual API calls to external providers:
+
+```bash
+# Navigate to the mocker directory
+cd mocker
+
+# Run the mock OpenAI server
+go run main.go -port 8000
+
+# Or with custom latency and jitter for realistic testing
+go run main.go -port 8000 -latency 50 -jitter 20 -big-payload
+```
+
+### 3. Configure Providers in Bifrost
+
+**For Real API Testing:**
+
+1. Access the Bifrost Web UI at `http://localhost:8080`
+2. Navigate to **Providers** section
+3. Add your desired provider (OpenAI, Anthropic, etc.) with API keys
+4. Configure routing rules as needed
+
+**For Mock Testing (Optional):**
+
+1. In the Bifrost Web UI, go to **Providers**
+2. Add an OpenAI provider with:
+   - **Base URL**: `http://localhost:8000` (or your mock server URL)
+   - **API Key**: Any dummy key (e.g., `sk-mock-key`)
+     In **Network Config**, set the base URL to point to your mock server
+
+### 4. Optimize Performance Settings
+
+For accurate benchmarking results, configure these performance settings in the Bifrost Web UI:
+
+**Buffer and Pool Configuration:**
+
+1. Navigate to **Providers** → **OpenAI** → **Performance Settings**
+2. Set **Concurrency**: `>7500` (recommended for high-load testing for concurrent connections)
+3. Set **Buffer Size**: `>10000` (recommended for high-load testing)
+4. Navigate to **Settings**
+5. Set **Initial Pool Size**: `>10000` (recommended for high-load testing)
+
+### 5. Disable Unnecessary Plugins (Optional)
+
+To minimize latency overhead and memory usage during benchmarking:
+
+1. Access **Settings** in the Bifrost Web UI
+2. Disable any non-essential plugins such as:
+   - Logging plugins (if detailed logs aren't required)
+   - Governance plugins (if not needed for testing)
+   - Semantic caching (if not needed for testing)
+
+**Note:** Plugin overhead is typically minimal as nothing is computed in the hot path, but disabling them ensures the purest performance measurements.
+
+### 6. Verify Bifrost Configuration
+
+Before running benchmarks, verify your setup:
+
+```bash
+# Test Bifrost connectivity
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello"}],
+    "model": "gpt-4o-mini"
+  }'
+```
+
+Expected response: JSON with completion data or mock response (depending on your provider configuration).
+
+### 7. Update Environment Configuration
+
+Update your `.env` file to match your Bifrost setup:
+
+```env
+BIFROST_PORT=8080  # Default Bifrost port
+# ... other provider ports
+```
+
+📖 **For advanced configuration options:** [Bifrost Documentation](https://docs.getbifrost.ai)
+
 ## Environment Setup
 
 Create a `.env` file in the project root with provider ports:
