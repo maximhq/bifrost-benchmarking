@@ -76,11 +76,28 @@ go run main.go -port 8000 -latency 50 -jitter 20 -big-payload
 
 **For Mock Testing (Optional):**
 
-1. In the Bifrost Web UI, go to **Providers**
+1. In the Bifrost Web UI, go to **Providers**.
 2. Add an OpenAI provider with:
-   - **Base URL**: `http://localhost:8000` (or your mock server URL)
+
+   - **Base URL**: Use the host URL where your mock server is running:
+
+     - For Docker Installation:
+
+       - **macOS / Windows (Docker Desktop):**  
+         `http://host.docker.internal:<mock server port>`
+       - **Linux:** Docker doesn’t provide `host.docker.internal` by default. Find your host’s Docker bridge IP using:
+
+         ```bash
+
+         ip addr show docker0
+         ```
+
+         Usually, the IP is `172.17.0.1`. Then configure the provider URL as:  
+         `http://172.17.0.1:<mock server port>`
+
    - **API Key**: Any dummy key (e.g., `sk-mock-key`)
-     In **Network Config**, set the base URL to point to your mock server
+
+> **Note:** Alternatively, on Linux, you can run the container with host networking (`--network host`) and use `http://127.0.0.1:<mock server port>` inside the container.
 
 ### 4. Optimize Performance Settings
 
