@@ -58,12 +58,39 @@ If you want to test without making actual API calls to external providers:
 # Navigate to the mocker directory
 cd mocker
 
-# Run the mock OpenAI server
+# Run the mock OpenAI server (basic setup)
 go run main.go -port 8000
 
-# Or with custom latency and jitter for realistic testing
+# With custom latency and jitter for realistic testing
 go run main.go -port 8000 -latency 50 -jitter 20 -big-payload
+
+# With authentication enabled
+go run main.go -port 8000 -auth "Bearer my-secret-key"
+
+# With failure simulation for error handling testing
+go run main.go -port 8000 -failure-percent 10 -failure-jitter 5
+
+# Complete setup with all features
+go run main.go -port 8000 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -big-payload
 ```
+
+**Available Mock Server Flags:**
+
+- `-host`: Host address (default: `localhost`)
+- `-port`: Port number (default: `8000`)
+- `-latency`: Base latency in milliseconds (default: `0`)
+- `-jitter`: Maximum latency jitter in milliseconds (default: `0`)
+- `-big-payload`: Use large ~10KB response payloads (default: `false`)
+- `-auth`: Authentication header value to require (default: `Bearer mocker-key`)
+- `-failure-percent`: Base failure percentage 0-100 (default: `0`)
+- `-failure-jitter`: Maximum failure rate jitter in percentage points (default: `0`)
+
+**Supported Endpoints:**
+
+- `/v1/chat/completions` and `/chat/completions` - Chat completions API
+- `/v1/responses` and `/responses` - Responses API
+
+See the [mocker README](mocker/README.md) for detailed documentation.
 
 ### 3. Configure Providers in Bifrost
 
