@@ -91,7 +91,7 @@ go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failur
 - `-latency <milliseconds>`: Base latency for each response (default: `0`)
 - `-jitter <milliseconds>`: Maximum random jitter added to latency, creating a range of ±jitter (default: `0`)
 - `-big-payload`: Use large ~10KB response payloads instead of small ones (default: `false`)
-- `-auth <auth_header>`: Authentication header value to require. Requests must include this exact value in the `Authorization` header (default: `Bearer mocker-key`)
+- `-auth <auth_header>`: Authentication header value to require. Requests must include this exact value in the `Authorization` header (default: `""`)
 - `-failure-percent <percentage>`: Base failure percentage (0-100) for simulating server errors (default: `0`)
 - `-failure-jitter <percentage_points>`: Maximum jitter in percentage points to add to failure rate, creating a range of ±failure-jitter (default: `0`)
 
@@ -182,7 +182,7 @@ For the `/v1/responses` and `/responses` endpoints, the mock server returns resp
 
 ## Authentication
 
-When the `-auth` flag is set (default: `Bearer mocker-key`), all requests must include an `Authorization` header with the exact value specified. Requests without the header or with an incorrect value will receive a `403 Forbidden` response.
+When the `-auth` flag is set (default: `""`), all requests must include an `Authorization` header with the exact value specified. Requests without the header or with an incorrect value will receive a `403 Forbidden` response.
 
 **Example request with authentication:**
 

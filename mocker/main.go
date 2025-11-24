@@ -42,14 +42,11 @@ type OpenAIResponsesMessageContent struct {
 	Text string `json:"text"`
 }
 
-type OpenAIResponsesMessage struct {
+type OpenAIResponsesOutputItem struct {
+	ID      string                          `json:"id"`
+	Type    string                          `json:"type"` // e.g., "message"
 	Role    string                          `json:"role"`
 	Content []OpenAIResponsesMessageContent `json:"content"`
-}
-
-type OpenAIResponsesOutputItem struct {
-	Type    string                 `json:"type"` // e.g., "message"
-	Message OpenAIResponsesMessage `json:"message"`
 }
 
 type OpenAIResponsesResponse struct {
@@ -79,7 +76,7 @@ func init() {
 	flag.IntVar(&latency, "latency", 0, "Latency in milliseconds to simulate")
 	flag.IntVar(&jitter, "jitter", 0, "Maximum jitter in milliseconds to add to latency (±jitter)")
 	flag.BoolVar(&bigPayload, "big-payload", false, "Use big payload")
-	flag.StringVar(&auth, "auth", "Bearer mocker-key", "Add authentication header key")
+	flag.StringVar(&auth, "auth", "", "Add authentication header key")
 	flag.IntVar(&failurePercent, "failure-percent", 0, "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", 0, "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
 }
@@ -289,14 +286,13 @@ func mockResponsesHandler(w http.ResponseWriter, r *http.Request) {
 		Model:   "gpt-4o-mini",
 		Output: []OpenAIResponsesOutputItem{
 			{
+				ID:   "msg_mock12345",
 				Type: "message",
-				Message: OpenAIResponsesMessage{
-					Role: "assistant",
-					Content: []OpenAIResponsesMessageContent{
-						{
-							Type: "output_text",
-							Text: mockContent,
-						},
+				Role: "assistant",
+				Content: []OpenAIResponsesMessageContent{
+					{
+						Type: "output_text",
+						Text: mockContent,
 					},
 				},
 			},
