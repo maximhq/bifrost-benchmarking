@@ -84,7 +84,78 @@ go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failur
 # Full-featured mock server with latency, jitter, auth, failure simulation, and large payloads
 ```
 
-### 3. Command-Line Flags
+### 3. Running in Docker
+
+The mocker server can be run in a Docker container for easy deployment and isolation.
+
+**Using Docker Compose:**
+
+For local testing, you can use Docker Compose:
+
+```bash
+cd mocker
+docker-compose up -d
+```
+
+To customize the configuration, modify the environment variables in the `environment` section or edit the `command` section in `docker-compose.yml` before running `docker-compose up`.
+
+### 5. Configuration Options
+
+The mocker server can be configured via **command-line flags** or **environment variables**. Command-line flags take precedence over environment variables.
+
+#### Environment Variables
+
+All configuration options can be set via environment variables, which is especially useful for containerized deployments (Docker, ECS Fargate, Kubernetes, etc.):
+
+- `MOCKER_HOST`: Host address to bind the mock server (default: `localhost`)
+- `MOCKER_PORT`: Port for the mock server (default: `8000`)
+- `MOCKER_LATENCY`: Base latency in milliseconds (default: `0`)
+- `MOCKER_JITTER`: Maximum jitter in milliseconds (default: `0`)
+- `MOCKER_BIG_PAYLOAD`: Use large payloads - set to `true`, `1`, `false`, or `0` (default: `false`)
+- `MOCKER_AUTH`: Authentication header value to require (default: `""`)
+- `MOCKER_FAILURE_PERCENT`: Base failure percentage 0-100 (default: `0`)
+- `MOCKER_FAILURE_JITTER`: Maximum jitter in percentage points (default: `0`)
+
+**Example using environment variables:**
+
+```bash
+export MOCKER_PORT=8080
+export MOCKER_LATENCY=50
+export MOCKER_JITTER=20
+export MOCKER_BIG_PAYLOAD=true
+export MOCKER_AUTH="Bearer my-secret-key"
+go run main.go
+```
+
+**Example in Docker:**
+
+```bash
+docker run -p 8000:8000 \
+  -e MOCKER_PORT=8000 \
+  -e MOCKER_LATENCY=50 \
+  -e MOCKER_JITTER=20 \
+  -e MOCKER_BIG_PAYLOAD=true \
+  -e MOCKER_AUTH="Bearer my-secret-key" \
+  mocker-server
+```
+
+**Example in docker-compose.yml:**
+
+```yaml
+services:
+  mocker:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MOCKER_PORT=8000
+      - MOCKER_LATENCY=50
+      - MOCKER_JITTER=20
+      - MOCKER_BIG_PAYLOAD=true
+      - MOCKER_AUTH=Bearer my-secret-key
+```
+
+#### Command-Line Flags
 
 - `-host <host_address>`: Host address to bind the mock server (default: `localhost`)
 - `-port <port_number>`: Port for the mock server (default: `8000`)
@@ -95,11 +166,15 @@ go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failur
 - `-failure-percent <percentage>`: Base failure percentage (0-100) for simulating server errors (default: `0`)
 - `-failure-jitter <percentage_points>`: Maximum jitter in percentage points to add to failure rate, creating a range of ±failure-jitter (default: `0`)
 
-**Note:** If `-auth` is set to an empty string (`-auth ""`), authentication is disabled. Otherwise, all requests must include the exact authentication header value.
+**Note:** Command-line flags override environment variables. If `-auth` is set to an empty string (`-auth ""`), authentication is disabled. Otherwise, all requests must include the exact authentication header value.
 
 ## API Endpoints
 
 The mock server supports the following endpoints:
+
+### Health Check
+
+- `GET /health` - Health check endpoint for load balancers and monitoring. Returns `{"status":"healthy"}` with HTTP 200.
 
 ### Chat Completions API
 
@@ -115,7 +190,14 @@ Both endpoints return responses in the standard OpenAI chat completion format.
 
 Both endpoints return responses in the OpenAI responses API format.
 
-**Note:** All endpoints support the same configuration flags (latency, jitter, auth, failure simulation, etc.) and require the same authentication header if `-auth` is set.
+### Embeddings API
+
+- `POST /v1/embeddings` - OpenAI-compatible embeddings endpoint
+- `POST /embeddings` - Alternative path for embeddings API
+
+Both endpoints return responses in the OpenAI embeddings API format.
+
+**Note:** All endpoints support the same configuration flags (latency, jitter, auth, failure simulation, etc.) and require the same authentication header if `-auth` is set. The `/health` endpoint does not require authentication and does not simulate latency or failures.
 
 ## Response Format
 
@@ -180,6 +262,30 @@ For the `/v1/responses` and `/responses` endpoints, the mock server returns resp
 }
 ```
 
+### Embeddings API Response
+
+For the `/v1/embeddings` and `/embeddings` endpoints, the mock server returns responses in the OpenAI embeddings API format:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.123, -0.456, 0.789, ...],
+      "index": 0
+    }
+  ],
+  "model": "text-embedding-ada-002",
+  "usage": {
+    "prompt_tokens": 8,
+    "total_tokens": 8
+  }
+}
+```
+
+The embedding vector defaults to 1536 dimensions (standard for `text-embedding-ada-002`). When `-big-payload` is enabled, the vector size increases to 4096 dimensions for larger payload testing.
+
 ## Authentication
 
 When the `-auth` flag is set (default: `""`), all requests must include an `Authorization` header with the exact value specified. Requests without the header or with an incorrect value will receive a `403 Forbidden` response.
@@ -228,4 +334,4 @@ Failed requests return a `500 Internal Server Error` with an OpenAI-compatible e
 - **Error Handling Testing**: Simulate server failures with configurable failure rates
 - **Authentication Testing**: Test authentication flows and error handling
 - **Development**: Local development without OpenAI API costs or rate limits
-- **Multi-Endpoint Testing**: Test both chat completions and responses API endpoints
+- **Multi-Endpoint Testing**: Test chat completions, responses API, and embeddings API endpoints

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  mocker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    # Option 1: Use environment variables (recommended)
+    environment:
+      - MOCKER_HOST=0.0.0.0
+      - MOCKER_PORT=8000
+      # Uncomment to customize:
+      # - MOCKER_LATENCY=50
+      # - MOCKER_JITTER=20
+      # - MOCKER_BIG_PAYLOAD=true
+      # - MOCKER_AUTH=Bearer my-secret-key
+      # - MOCKER_FAILURE_PERCENT=5
+      # - MOCKER_FAILURE_JITTER=2
+    
+    # Option 2: Use command-line flags (overrides env vars)
+    # command: ["./mocker", "-host", "0.0.0.0", "-port", "8000"]
+    # command: ["./mocker", "-host", "0.0.0.0", "-port", "8000", "-latency", "50", "-jitter", "20", "-big-payload"]
+    # command: ["./mocker", "-host", "0.0.0.0", "-port", "8000", "-auth", "Bearer my-secret-key"]
+    restart: unless-stopped
+
