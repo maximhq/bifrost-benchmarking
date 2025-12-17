@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/valyala/fasthttp"
 )
 
 type OpenAIChatCompletionsResponse struct {
@@ -71,7 +71,7 @@ type OpenAIEmbeddingData struct {
 type OpenAIEmbeddingsResponse struct {
 	Object string                `json:"object"` // "list"
 	Data   []OpenAIEmbeddingData `json:"data"`   // Array of embedding objects
-	Model  string                `json:"model"`   // Model used
+	Model  string                `json:"model"`  // Model used
 	Usage  schemas.LLMUsage      `json:"usage"`  // Token usage
 }
 
@@ -135,73 +135,13 @@ func StrPtr(s string) *string {
 	return &s
 }
 
-func mockChatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
-	// Check authentication header
-	if auth != "" {
-		// Check Authorization header
-		authorizationHeader := r.Header.Get("Authorization")
-		if authorizationHeader == "" {
-			http.Error(w, "Forbidden: Missing authentication header 'Authorization'", http.StatusForbidden)
-			return
-		}
-		if authorizationHeader != auth {
-			log.Printf("Invalid authentication header 'Authorization': %s", authorizationHeader)
-			http.Error(w, "Forbidden: Invalid authentication header 'Authorization'", http.StatusForbidden)
-			return
-		}
-	}
-
-	if r.Method != http.MethodPost {
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Check if this request should fail based on failure percentage with jitter
-	if failurePercent > 0 {
-		actualFailurePercent := failurePercent
-		if failureJitter > 0 {
-			// Add random jitter: ±failureJitter percentage points
-			jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
-			actualFailurePercent += jitterOffset
-			// Ensure failure percentage stays within 0-100 bounds
-			if actualFailurePercent < 0 {
-				actualFailurePercent = 0
-			}
-			if actualFailurePercent > 100 {
-				actualFailurePercent = 100
-			}
-		}
-
-		// Generate random number 0-99 and check if it's less than failure percentage
-		if actualFailurePercent > 0 && rand.Intn(100) < actualFailurePercent {
-			// Return error response
-			errorResp := OpenAIError{
-				EventID: StrPtr("evt_mock_error_12345"),
-				Error: &ErrorField{
-					Type:    StrPtr("server_error"),
-					Code:    StrPtr("internal_server_error"),
-					Message: "The server had an error while processing your request. Sorry about that!",
-				},
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			if err := json.NewEncoder(w).Encode(errorResp); err != nil {
-				log.Printf("Error encoding error response: %v", err)
-				http.Error(w, "Failed to encode error response", http.StatusInternalServerError)
-			}
-			return
-		}
-	}
-
-	// Simulate latency with optional jitter
+// simulateLatency handles latency simulation with optional jitter
+func simulateLatency() {
 	if latency > 0 || jitter > 0 {
 		actualLatency := latency
 		if jitter > 0 {
-			// Add random jitter: ±jitter milliseconds
 			jitterOffset := rand.Intn(2*jitter+1) - jitter
 			actualLatency += jitterOffset
-			// Ensure latency doesn't go negative
 			if actualLatency < 0 {
 				actualLatency = 0
 			}
@@ -210,15 +150,90 @@ func mockChatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(time.Duration(actualLatency) * time.Millisecond)
 		}
 	}
+}
+
+// shouldFail checks if request should fail based on failure percentage with jitter
+func shouldFail() bool {
+	if failurePercent > 0 {
+		actualFailurePercent := failurePercent
+		if failureJitter > 0 {
+			jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
+			actualFailurePercent += jitterOffset
+			if actualFailurePercent < 0 {
+				actualFailurePercent = 0
+			}
+			if actualFailurePercent > 100 {
+				actualFailurePercent = 100
+			}
+		}
+		return actualFailurePercent > 0 && rand.Intn(100) < actualFailurePercent
+	}
+	return false
+}
+
+// sendErrorResponse sends a standardized error response
+func sendErrorResponse(ctx *fasthttp.RequestCtx, statusCode int, message string) {
+	errorResp := OpenAIError{
+		EventID: StrPtr("evt_mock_error_12345"),
+		Error: &ErrorField{
+			Type:    StrPtr("server_error"),
+			Code:    StrPtr("internal_server_error"),
+			Message: message,
+		},
+	}
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(statusCode)
+	if err := json.NewEncoder(ctx).Encode(errorResp); err != nil {
+		log.Printf("Error encoding error response: %v", err)
+	}
+}
+
+// checkAuth validates authorization header
+func checkAuth(ctx *fasthttp.RequestCtx) bool {
+	if auth != "" {
+		authorizationHeader := string(ctx.Request.Header.Peek("Authorization"))
+		if authorizationHeader == "" {
+			ctx.SetStatusCode(fasthttp.StatusForbidden)
+			ctx.SetBodyString("Forbidden: Missing authentication header 'Authorization'")
+			return false
+		}
+		if authorizationHeader != auth {
+			log.Printf("Invalid authentication header 'Authorization': %s", authorizationHeader)
+			ctx.SetStatusCode(fasthttp.StatusForbidden)
+			ctx.SetBodyString("Forbidden: Invalid authentication header 'Authorization'")
+			return false
+		}
+	}
+	return true
+}
+
+// checkMethod validates HTTP method is POST
+func checkMethod(ctx *fasthttp.RequestCtx) bool {
+	if !ctx.IsPost() {
+		ctx.SetStatusCode(fasthttp.StatusMethodNotAllowed)
+		ctx.SetBodyString("Only POST method is allowed")
+		return false
+	}
+	return true
+}
+
+func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+
+	if shouldFail() {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
+		return
+	}
+
+	simulateLatency()
 
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
-		// Repeat content to generate approximately 10KB response
-		// Each repetition is ~55 chars, so ~182 repetitions ≈ 10KB
 		mockContent = strings.Repeat(mockContent, 182)
 	}
 
-	// Create a mock response
 	mockChoiceMessage := schemas.BifrostResponseChoiceMessage{
 		Role:    schemas.ModelChatMessageRole("assistant"),
 		Content: StrPtr(mockContent),
@@ -245,80 +260,26 @@ func mockChatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(mockResp); err != nil {
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(mockResp); err != nil {
 		log.Printf("Error encoding mock response: %v", err)
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
 	}
 }
 
-func mockResponsesHandler(w http.ResponseWriter, r *http.Request) {
-	// Check authentication header
-	if auth != "" {
-		authorizationHeader := r.Header.Get("Authorization")
-		if authorizationHeader == "" {
-			http.Error(w, "Forbidden: Missing authentication header 'Authorization'", http.StatusForbidden)
-			return
-		}
-		if authorizationHeader != auth {
-			log.Printf("Invalid authentication header 'Authorization': %s", authorizationHeader)
-			http.Error(w, "Forbidden: Invalid authentication header 'Authorization'", http.StatusForbidden)
-			return
-		}
-	}
-
-	if r.Method != http.MethodPost {
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
 
-	// Failure simulation
-	if failurePercent > 0 {
-		actualFailurePercent := failurePercent
-		if failureJitter > 0 {
-			jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
-			actualFailurePercent += jitterOffset
-			if actualFailurePercent < 0 {
-				actualFailurePercent = 0
-			}
-			if actualFailurePercent > 100 {
-				actualFailurePercent = 100
-			}
-		}
-		if actualFailurePercent > 0 && rand.Intn(100) < actualFailurePercent {
-			errorResp := OpenAIError{
-				EventID: StrPtr("evt_mock_error_12345"),
-				Error: &ErrorField{
-					Type:    StrPtr("server_error"),
-					Code:    StrPtr("internal_server_error"),
-					Message: "The server had an error while processing your request. Sorry about that!",
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			if err := json.NewEncoder(w).Encode(errorResp); err != nil {
-				log.Printf("Error encoding error response: %v", err)
-				http.Error(w, "Failed to encode error response", http.StatusInternalServerError)
-			}
-			return
-		}
+	if shouldFail() {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
+		return
 	}
 
-	// Simulate latency with optional jitter
-	if latency > 0 || jitter > 0 {
-		actualLatency := latency
-		if jitter > 0 {
-			jitterOffset := rand.Intn(2*jitter+1) - jitter
-			actualLatency += jitterOffset
-			if actualLatency < 0 {
-				actualLatency = 0
-			}
-		}
-		if actualLatency > 0 {
-			time.Sleep(time.Duration(actualLatency) * time.Millisecond)
-		}
-	}
+	simulateLatency()
 
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
@@ -354,102 +315,38 @@ func mockResponsesHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding mock response: %v", err)
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
 	}
 }
 
-func mockEmbeddingsHandler(w http.ResponseWriter, r *http.Request) {
-	// Check authentication header
-	if auth != "" {
-		authorizationHeader := r.Header.Get("Authorization")
-		if authorizationHeader == "" {
-			http.Error(w, "Forbidden: Missing authentication header 'Authorization'", http.StatusForbidden)
-			return
-		}
-		if authorizationHeader != auth {
-			log.Printf("Invalid authentication header 'Authorization': %s", authorizationHeader)
-			http.Error(w, "Forbidden: Invalid authentication header 'Authorization'", http.StatusForbidden)
-			return
-		}
-	}
-
-	if r.Method != http.MethodPost {
-		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
 
-	// Failure simulation
-	if failurePercent > 0 {
-		actualFailurePercent := failurePercent
-		if failureJitter > 0 {
-			jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
-			actualFailurePercent += jitterOffset
-			if actualFailurePercent < 0 {
-				actualFailurePercent = 0
-			}
-			if actualFailurePercent > 100 {
-				actualFailurePercent = 100
-			}
-		}
-		if actualFailurePercent > 0 && rand.Intn(100) < actualFailurePercent {
-			errorResp := OpenAIError{
-				EventID: StrPtr("evt_mock_error_12345"),
-				Error: &ErrorField{
-					Type:    StrPtr("server_error"),
-					Code:    StrPtr("internal_server_error"),
-					Message: "The server had an error while processing your request. Sorry about that!",
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			if err := json.NewEncoder(w).Encode(errorResp); err != nil {
-				log.Printf("Error encoding error response: %v", err)
-				http.Error(w, "Failed to encode error response", http.StatusInternalServerError)
-			}
-			return
-		}
+	if shouldFail() {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
+		return
 	}
 
-	// Simulate latency with optional jitter
-	if latency > 0 || jitter > 0 {
-		actualLatency := latency
-		if jitter > 0 {
-			jitterOffset := rand.Intn(2*jitter+1) - jitter
-			actualLatency += jitterOffset
-			if actualLatency < 0 {
-				actualLatency = 0
-			}
-		}
-		if actualLatency > 0 {
-			time.Sleep(time.Duration(actualLatency) * time.Millisecond)
-		}
-	}
+	simulateLatency()
 
-	// Generate mock embedding vector
-	// Default to 1536 dimensions (text-embedding-ada-002 standard)
-	// Use larger vector if bigPayload is enabled
 	embeddingDimensions := 1536
 	if bigPayload {
-		// Use larger embedding size for big payload testing (~10KB)
 		embeddingDimensions = 4096
 	}
 
-	// Generate random embedding vector (normalized values between -1 and 1)
 	embedding := make([]float64, embeddingDimensions)
 	for i := range embedding {
-		// Generate random float between -1 and 1
 		embedding[i] = rand.Float64()*2 - 1
 	}
 
-	// Determine number of inputs (default to 1, but could parse from request)
-	// For simplicity, we'll always return 1 embedding
 	numInputs := 1
-
-	// Create embedding data array
 	embeddingData := make([]OpenAIEmbeddingData, numInputs)
 	for i := 0; i < numInputs; i++ {
 		embeddingData[i] = OpenAIEmbeddingData{
@@ -459,8 +356,7 @@ func mockEmbeddingsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Generate random token usage
-	randomPromptTokens := rand.Intn(100) + 1 // At least 1 token
+	randomPromptTokens := rand.Intn(100) + 1
 
 	resp := OpenAIEmbeddingsResponse{
 		Object: "list",
@@ -472,39 +368,62 @@ func mockEmbeddingsHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding embeddings response: %v", err)
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
 	}
 }
 
-func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"healthy"}`))
+func healthCheckHandler(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.SetBodyString(`{"status":"healthy"}`)
+}
+
+// router handles routing requests to appropriate handlers
+func router(ctx *fasthttp.RequestCtx) {
+	path := string(ctx.Path())
+
+	switch path {
+	case "/health":
+		healthCheckHandler(ctx)
+	case "/chat/completions", "/v1/chat/completions":
+		mockChatCompletionsHandler(ctx)
+	case "/responses", "/v1/responses":
+		mockResponsesHandler(ctx)
+	case "/embeddings", "/v1/embeddings":
+		mockEmbeddingsHandler(ctx)
+	default:
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		ctx.SetBodyString("Not found")
+	}
 }
 
 func main() {
 	flag.Parse()
 
-	// Register handlers (include OpenAI-compatible paths)
-	http.HandleFunc("/health", healthCheckHandler)
-	http.HandleFunc("/chat/completions", mockChatCompletionsHandler)
-	http.HandleFunc("/v1/chat/completions", mockChatCompletionsHandler)
-	http.HandleFunc("/responses", mockResponsesHandler)
-	http.HandleFunc("/v1/responses", mockResponsesHandler)
-	http.HandleFunc("/embeddings", mockEmbeddingsHandler)
-	http.HandleFunc("/v1/embeddings", mockEmbeddingsHandler)
-
 	addr := fmt.Sprintf("%s:%d", host, port)
 	if jitter > 0 {
-		log.Printf("Mock OpenAI server starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
+		log.Printf("Mock OpenAI server (fasthttp) starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
 	} else {
-		log.Printf("Mock OpenAI server starting on %s with latency %dms...\n", addr, latency)
+		log.Printf("Mock OpenAI server (fasthttp) starting on %s with latency %dms...\n", addr, latency)
 	}
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	log.Printf("Max request body size: 50MB")
+
+	// Create fasthttp server with 50MB max request body size
+	server := &fasthttp.Server{
+		Handler:            router,
+		MaxRequestBodySize: 50 * 1024 * 1024, // 50MB
+		ReadBufferSize:     1024 * 16,        // 16KB read buffer
+		ReadTimeout:        300 * time.Second,
+		WriteTimeout:       300 * time.Second,
+		IdleTimeout:        60 * time.Second,
+	}
+
+	if err := server.ListenAndServe(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

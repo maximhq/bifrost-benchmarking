@@ -8,6 +8,8 @@ A comprehensive command-line tool for benchmarking API providers with advanced m
 - **Advanced Metrics**: Latency percentiles, throughput, success rates, and server memory monitoring
 - **Real-time Memory Tracking**: Monitor server-side RAM usage during benchmarks
 - **Dynamic Payload Generation**: Support for small and large payloads with dynamic content injection
+- **Custom Prompt Files**: Load prompts from files for large payload testing (up to 50MB+)
+- **Embeddings Support**: Benchmark embeddings endpoints with configurable request types
 - **Environment-based Configuration**: Automatic port detection via `.env` file
 - **Comprehensive Results**: JSON output with aggregated metrics and historical data
 - **Error Analysis**: Track and categorize failed requests and drop reasons
@@ -81,7 +83,7 @@ go run main.go -port 8000 -latency 50 -jitter 20 -auth "Bearer test-key" -failur
 - `-latency`: Base latency in milliseconds (default: `0`)
 - `-jitter`: Maximum latency jitter in milliseconds (default: `0`)
 - `-big-payload`: Use large ~10KB response payloads (default: `false`)
-- `-auth`: Authentication header value to require (default: `Bearer mocker-key`)
+- `-auth`: Authentication header value to require (default: `""`)
 - `-failure-percent`: Base failure percentage 0-100 (default: `0`)
 - `-failure-jitter`: Maximum failure rate jitter in percentage points (default: `0`)
 
@@ -89,6 +91,7 @@ go run main.go -port 8000 -latency 50 -jitter 20 -auth "Bearer test-key" -failur
 
 - `/v1/chat/completions` and `/chat/completions` - Chat completions API
 - `/v1/responses` and `/responses` - Responses API
+- `/v1/embeddings` and `/embeddings` - Embeddings API
 
 See the [mocker README](mocker/README.md) for detailed documentation.
 
@@ -234,16 +237,19 @@ go run benchmark.go -big-payload -provider portkey -duration 60
 
 ### Command-Line Flags
 
-| Flag           | Type   | Default      | Description                                                     |
-| -------------- | ------ | ------------ | --------------------------------------------------------------- |
-| `-rate`        | int    | 500          | Requests per second to send                                     |
-| `-duration`    | int    | 10           | Test duration in seconds                                        |
-| `-output`      | string | results.json | Output file for benchmark results                               |
-| `-cooldown`    | int    | 60           | Cooldown period between tests (seconds)                         |
-| `-provider`    | string | ""           | Specific provider to test (bifrost, litellm, portkey, helicone) |
-| `-big-payload` | bool   | false        | Use large ~10KB payloads instead of small ones                  |
-| `-model`       | string | gpt-4o-mini  | Model identifier to use in requests                             |
-| `-suffix`      | string | v1           | URL route suffix (e.g., v1, v2)                                 |
+| Flag           | Type   | Default           | Description                                                     |
+| -------------- | ------ | ----------------- | --------------------------------------------------------------- |
+| `-rate`        | int    | 500               | Requests per second to send                                     |
+| `-duration`    | int    | 10                | Test duration in seconds                                        |
+| `-output`      | string | results.json      | Output file for benchmark results                               |
+| `-cooldown`    | int    | 60                | Cooldown period between tests (seconds)                         |
+| `-provider`    | string | ""                | Specific provider to test (bifrost, litellm, portkey, helicone) |
+| `-big-payload` | bool   | false             | Use large ~10KB payloads instead of small ones                  |
+| `-model`       | string | gpt-4o-mini       | Model identifier to use in requests                             |
+| `-suffix`      | string | v1                | URL route suffix (e.g., v1, v2)                                 |
+| `-prompt-file` | string | ""                | Path to a file containing the prompt to use                     |
+| `-path`        | string | chat/completions  | API path to hit (e.g., 'chat/completions' or 'embeddings')      |
+| `-request-type`| string | chat              | Type of request: 'chat' or 'embedding'                          |
 
 ### Advanced Examples
 
@@ -266,6 +272,65 @@ go run benchmark.go -rate 100 -duration 5 -cooldown 10
 ```bash
 go run benchmark.go -provider bifrost -rate 1500 -duration 120 -output bifrost_detailed.json
 # Focus test: Bifrost only, 1500 RPS for 2 minutes
+```
+
+### Embeddings Benchmarking
+
+The benchmark tool supports testing embeddings endpoints with custom prompts:
+
+**Basic embeddings test:**
+
+```bash
+go run benchmark.go -provider bifrost -request-type embedding -path embeddings -model text-embedding-ada-002
+# Tests embeddings endpoint with default prompt
+```
+
+**Large prompt embeddings test (using prompt file):**
+
+```bash
+# First create a large prompt file (e.g., 10MB)
+go run benchmark.go -provider bifrost -request-type embedding -path embeddings -prompt-file prompt.txt -model text-embedding-3-small -rate 10 -duration 30
+# Tests embeddings with large prompts from file
+```
+
+**Custom path testing:**
+
+```bash
+go run benchmark.go -provider bifrost -path v1/embeddings -suffix "" -request-type embedding
+# Uses full path without suffix duplication
+```
+
+### Prompt File Format
+
+When using `-prompt-file`, the tool reads the entire file content as the prompt. The request index and timestamp are automatically prepended to prevent LLM prompt caching:
+
+```
+<request_index> <timestamp> <your prompt content>
+```
+
+For example, if your prompt file contains "Hello world", the actual request will be:
+```
+1 2024-01-15T10:30:00Z Hello world
+```
+
+### Request Types
+
+The `-request-type` flag determines the payload format:
+
+**Chat (default):**
+```json
+{
+  "messages": [{"role": "user", "content": "<prompt>"}],
+  "model": "openai/<model>"
+}
+```
+
+**Embedding:**
+```json
+{
+  "input": "<prompt>",
+  "model": "openai/<model>"
+}
 ```
 
 ## Output & Results

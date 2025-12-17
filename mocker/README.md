@@ -1,11 +1,14 @@
 # Mock OpenAI API Server
 
-This directory contains a mock server that mimics the OpenAI API's chat completions endpoint (`/v1/chat/completions`). It's designed for testing and benchmarking, allowing simulation of OpenAI API responses without live server interaction.
+This directory contains a high-performance mock server built with [fasthttp](https://github.com/valyala/fasthttp) that mimics the OpenAI API endpoints. It's designed for testing and benchmarking, allowing simulation of OpenAI API responses without live server interaction.
 
 ## Features
 
+- **High Performance**: Built with fasthttp for maximum throughput and minimal latency
+- **Large Payload Support**: Handles request bodies up to 50MB for testing large prompt scenarios
 - **OpenAI API Compatibility**: Responds to `POST` requests at `/v1/chat/completions` and `/chat/completions` with realistic response structure
 - **OpenAI Responses API Support**: Supports the `/v1/responses` and `/responses` endpoints for OpenAI's responses API format
+- **OpenAI Embeddings API Support**: Supports the `/v1/embeddings` and `/embeddings` endpoints for embeddings
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
 - **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag
@@ -18,6 +21,7 @@ This directory contains a mock server that mimics the OpenAI API's chat completi
 
 - Go installed on your system
 - Access to the `github.com/maximhq/bifrost/core/schemas` package
+- Access to the `github.com/valyala/fasthttp` package
 
 ## Getting Started
 
@@ -335,3 +339,19 @@ Failed requests return a `500 Internal Server Error` with an OpenAI-compatible e
 - **Authentication Testing**: Test authentication flows and error handling
 - **Development**: Local development without OpenAI API costs or rate limits
 - **Multi-Endpoint Testing**: Test chat completions, responses API, and embeddings API endpoints
+
+## Technical Details
+
+### Server Configuration
+
+The mocker uses fasthttp with the following configuration for high-performance benchmarking:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `MaxRequestBodySize` | 50MB | Maximum allowed request body size |
+| `ReadBufferSize` | 16KB | Buffer size for reading incoming requests |
+| `ReadTimeout` | 300s | Maximum time to read the full request |
+| `WriteTimeout` | 300s | Maximum time to write the full response |
+| `IdleTimeout` | 60s | Maximum time to wait for the next request |
+
+This configuration allows the mocker to handle large payloads (up to 50MB) which is useful for testing embedding requests with large text inputs or stress testing with big prompts.

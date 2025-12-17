@@ -4,3 +4,4 @@ myenv
 .env
 *.json
 test*
+10mbprompt.txt

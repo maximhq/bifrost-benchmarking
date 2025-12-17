@@ -25,10 +25,11 @@ import (
 // Provider represents an API provider to be benchmarked
 // It holds the necessary information to target the provider's API.
 type Provider struct {
-	Name     string // Name of the provider (e.g., "bifrost", "litellm")
-	Endpoint string // API endpoint path (e.g., "v1/chat/completions")
-	Port     string // Port number the provider's server is listening on
-	Payload  []byte // JSON payload to be used for requests
+	Name        string // Name of the provider (e.g., "bifrost", "litellm")
+	Endpoint    string // API endpoint path (e.g., "v1/chat/completions")
+	Port        string // Port number the provider's server is listening on
+	Payload     []byte // JSON payload to be used for requests
+	RequestType string // Type of request: "chat" or "embedding"
 }
 
 // BenchmarkResult holds the aggregated metrics from a single benchmark run for a provider.
@@ -69,12 +70,31 @@ func main() {
 	bigPayload := flag.Bool("big-payload", false, "Use a bigger payload")
 	model := flag.String("model", "gpt-4o-mini", "Model to use")
 	suffix := flag.String("suffix", "v1", "Suffix to add to the url route")
+	promptFile := flag.String("prompt-file", "", "Path to a file containing the prompt to use")
+	path := flag.String("path", "chat/completions", "API path to hit (e.g., 'chat/completions' or 'embeddings')")
+	requestType := flag.String("request-type", "chat", "Type of request: 'chat' or 'embedding'")
 
 	// Parse the command line flags.
 	flag.Parse()
 
+	// Validate request type
+	if *requestType != "chat" && *requestType != "embedding" {
+		log.Fatalf("Invalid request-type '%s'. Must be 'chat' or 'embedding'", *requestType)
+	}
+
+	// Read prompt from file if specified
+	var filePrompt string
+	if *promptFile != "" {
+		promptBytes, err := os.ReadFile(*promptFile)
+		if err != nil {
+			log.Fatalf("Error reading prompt file '%s': %v", *promptFile, err)
+		}
+		filePrompt = string(promptBytes)
+		fmt.Printf("Loaded prompt from file: %s (%.2f MB)\n", *promptFile, float64(len(filePrompt))/(1024*1024))
+	}
+
 	// Initialize providers
-	providers := initializeProviders(*bigPayload, *model, *suffix)
+	providers := initializeProviders(*bigPayload, *model, *suffix, *path, *requestType, filePrompt)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -112,86 +132,124 @@ func getProviderNames(providers []Provider) []string {
 // initializeProvider creates and configures a Provider struct based on the command-line arguments.
 // It determines the payload (small or big) and marshals it into JSON bytes.
 // Placeholders #{request_index} and #{timestamp} in the payload content will be dynamically replaced.
-func initializeProviders(bigPayload bool, model string, suffix string) []Provider {
+func initializeProviders(bigPayload bool, model string, suffix string, apiPath string, requestType string, filePrompt string) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	var payload []byte
+	// Determine the prompt content
+	// #{request_index} is placed at the START to prevent LLM prompt caching
+	var promptContent string
+	if filePrompt != "" {
+		promptContent = "#{request_index} #{timestamp} " + filePrompt
+	} else if bigPayload {
+		promptContent = "#{request_index} #{timestamp} This is a benchmark request. " +
+			"Please provide a comprehensive analysis of the following topics: " +
+			"1. Explain the concept of Proxy Gateway in the context of AI, including its architecture, benefits, and use cases. " +
+			"2. Discuss the role of load balancing and request routing in AI proxy gateways. " +
+			"3. Analyze the impact of caching and rate limiting on AI service performance. " +
+			"4. Describe common challenges in implementing AI proxy gateways and potential solutions. " +
+			"5. Compare different AI proxy gateway implementations and their trade-offs. " +
+			"6. What is the difference between a proxy gateway and a reverse proxy? " +
+			"7. What is the difference between a proxy gateway and a load balancer? " +
+			"8. What is the difference between a proxy gateway and a web server? " +
+			"9. What is the difference between a proxy gateway and a CDN? " +
+			"10. What is the difference between a proxy gateway and a firewall? " +
+			"11. What is the difference between a proxy gateway and a VPN? " +
+			"12. What is the difference between a proxy gateway and a WAF? " +
+			"13. What is the difference between a proxy gateway and a DDoS protection service? " +
+			"14. What is the difference between a proxy gateway and a DNS server? " +
+			"15. What is the difference between a proxy gateway and a web application firewall? " +
+			"16. What is the difference between a proxy gateway and a load balancer? " +
+			"17. What is the difference between a proxy gateway and a web server? " +
+			"18. What is the difference between a proxy gateway and a CDN? " +
+			"19. What is the difference between a proxy gateway and a firewall? " +
+			"20. What is the difference between a proxy gateway and a VPN? " +
+			"Please provide detailed explanations with examples and technical details for each point. "
+	} else {
+		promptContent = "#{request_index} #{timestamp} This is a benchmark request. How are you?"
+	}
 
-	if bigPayload {
-		// Create payload template with dynamic content placeholders
-		payload, _ = json.Marshal(map[string]interface{}{
-			"messages": []map[string]string{
-				{
-					"role": "user",
-					"content": "This is a benchmark request #{request_index} at #{timestamp}. " +
-						"Please provide a comprehensive analysis of the following topics: " +
-						"1. Explain the concept of Proxy Gateway in the context of AI, including its architecture, benefits, and use cases. " +
-						"2. Discuss the role of load balancing and request routing in AI proxy gateways. " +
-						"3. Analyze the impact of caching and rate limiting on AI service performance. " +
-						"4. Describe common challenges in implementing AI proxy gateways and potential solutions. " +
-						"5. Compare different AI proxy gateway implementations and their trade-offs. " +
-						"6. What is the difference between a proxy gateway and a reverse proxy? " +
-						"7. What is the difference between a proxy gateway and a load balancer? " +
-						"8. What is the difference between a proxy gateway and a web server? " +
-						"9. What is the difference between a proxy gateway and a CDN? " +
-						"10. What is the difference between a proxy gateway and a firewall? " +
-						"11. What is the difference between a proxy gateway and a VPN? " +
-						"12. What is the difference between a proxy gateway and a WAF? " +
-						"13. What is the difference between a proxy gateway and a DDoS protection service? " +
-						"14. What is the difference between a proxy gateway and a DNS server? " +
-						"15. What is the difference between a proxy gateway and a web application firewall? " +
-						"16. What is the difference between a proxy gateway and a load balancer? " +
-						"17. What is the difference between a proxy gateway and a web server? " +
-						"18. What is the difference between a proxy gateway and a CDN? " +
-						"19. What is the difference between a proxy gateway and a firewall? " +
-						"20. What is the difference between a proxy gateway and a VPN? " +
-						"Please provide detailed explanations with examples and technical details for each point. ",
-				},
-			},
+	// Create payloads based on request type
+	// For Bifrost: use "openai/" prefix
+	// For OpenAI: no prefix
+	var bifrostPayload []byte
+	var openaiPayload []byte
+
+	if requestType == "embedding" {
+		// Bifrost embeddings format (with openai/ prefix)
+		bifrostPayload, _ = json.Marshal(map[string]interface{}{
+			"input": promptContent,
 			"model": "openai/" + model,
 		})
+		// OpenAI embeddings format (no prefix)
+		openaiPayload, _ = json.Marshal(map[string]interface{}{
+			"input": promptContent,
+			"model": model,
+		})
 	} else {
-		payload, _ = json.Marshal(map[string]interface{}{
+		// Bifrost chat completion format (with openai/ prefix)
+		bifrostPayload, _ = json.Marshal(map[string]interface{}{
 			"messages": []map[string]string{
 				{
 					"role":    "user",
-					"content": "This is a benchmark request #{request_index} at #{timestamp}. How are you?",
+					"content": promptContent,
 				},
 			},
 			"model": "openai/" + model,
 		})
+		// OpenAI chat completion format (no prefix)
+		openaiPayload, _ = json.Marshal(map[string]interface{}{
+			"messages": []map[string]string{
+				{
+					"role":    "user",
+					"content": promptContent,
+				},
+			},
+			"model": model,
+		})
 	}
 
-	baseUrl := "http://localhost:%s/%s/chat/completions"
+	baseUrl := "http://localhost:%s/%s/" + apiPath
+	openaiUrl := fmt.Sprintf("https://api.openai.com/%s", apiPath)
 
-	// Create providers with ports from .env
+	// Create providers - OpenAI and Bifrost for embeddings comparison
 	providers := []Provider{
 		{
-			Name:     "Bifrost",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BIFROST_PORT"), suffix),
-			Port:     os.Getenv("BIFROST_PORT"),
-			Payload:  payload,
+			Name:        "OpenAI",
+			Endpoint:    openaiUrl,
+			Port:        "", // OpenAI is not localhost, so no port monitoring
+			Payload:     openaiPayload,
+			RequestType: requestType,
 		},
 		{
-			Name:     "Litellm",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT"), suffix),
-			Port:     os.Getenv("LITELLM_PORT"),
-			Payload:  payload,
+			Name:        "Bifrost",
+			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("BIFROST_PORT"), suffix),
+			Port:        os.Getenv("BIFROST_PORT"),
+			Payload:     bifrostPayload,
+			RequestType: requestType,
 		},
 		{
-			Name:     "Portkey",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT"), suffix),
-			Port:     os.Getenv("PORTKEY_PORT"),
-			Payload:  payload,
+			Name:        "Litellm",
+			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT"), suffix),
+			Port:        os.Getenv("LITELLM_PORT"),
+			Payload:     bifrostPayload, // Use bifrost payload format (with prefix)
+			RequestType: requestType,
 		},
 		{
-			Name:     "Helicone",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT"), suffix),
-			Port:     os.Getenv("HELICONE_PORT"),
-			Payload:  payload,
+			Name:        "Portkey",
+			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT"), suffix),
+			Port:        os.Getenv("PORTKEY_PORT"),
+			Payload:     bifrostPayload, // Use bifrost payload format (with prefix)
+			RequestType: requestType,
+		},
+		{
+			Name:        "Helicone",
+			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT"), suffix),
+			Port:        os.Getenv("HELICONE_PORT"),
+			Payload:     bifrostPayload, // Use bifrost payload format (with prefix)
+			RequestType: requestType,
 		},
 	}
 
@@ -230,18 +288,20 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 		// Initialize drop reasons tracking
 		dropReasons := make(map[string]int)
 
-		// Start server memory monitoring
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			p, err := getProcessByPort(provider.Port)
-			if err != nil {
-				log.Printf("Warning: Could not find process on port %s: %v", provider.Port, err)
-				return
-			}
+		// Start server memory monitoring (only for localhost providers with a port)
+		if provider.Port != "" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				p, err := getProcessByPort(provider.Port)
+				if err != nil {
+					log.Printf("Warning: Could not find process on port %s: %v", provider.Port, err)
+					return
+				}
 
-			monitorServerMemory(p, stopMonitoring, &serverMemStats, &memMutex)
-		}()
+				monitorServerMemory(p, stopMonitoring, &serverMemStats, &memMutex)
+			}()
+		}
 
 		// Create context with timeout for the attack
 		ctx, cancel := context.WithTimeout(context.Background(),
@@ -275,9 +335,11 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 	EndAttack: // Label to jump to when the attack finishes or times out
 		metrics.Close() // Finalize metrics calculation
 
-		// Stop server memory monitoring and wait for it to finish.
-		close(stopMonitoring) // Signal the monitorServerMemory goroutine to stop
-		wg.Wait()             // Wait for monitorServerMemory to complete
+		// Stop server memory monitoring and wait for it to finish (only if monitoring was started).
+		if provider.Port != "" {
+			close(stopMonitoring) // Signal the monitorServerMemory goroutine to stop
+			wg.Wait()             // Wait for monitorServerMemory to complete
+		}
 
 		// Safely copy the collected server memory stats for this benchmark run.
 		memMutex.Lock()
@@ -426,13 +488,24 @@ func createTargeter(provider Provider) vegeta.Targeter {
 			return err
 		}
 
-		text := payload["messages"].([]interface{})[0].(map[string]interface{})["content"].(string)
+		var text string
+		if provider.RequestType == "embedding" {
+			// For embeddings, the input field contains the text
+			text = payload["input"].(string)
+		} else {
+			// For chat completions, extract from messages
+			text = payload["messages"].([]interface{})[0].(map[string]interface{})["content"].(string)
+		}
 
 		// Replace placeholders with values
 		updatedText := strings.ReplaceAll(text, "#{request_index}", fmt.Sprintf("%d", requestCounter))
 		updatedText = strings.ReplaceAll(updatedText, "#{timestamp}", time.Now().Format(time.RFC3339))
 
-		payload["messages"].([]interface{})[0].(map[string]interface{})["content"] = updatedText
+		if provider.RequestType == "embedding" {
+			payload["input"] = updatedText
+		} else {
+			payload["messages"].([]interface{})[0].(map[string]interface{})["content"] = updatedText
+		}
 
 		// Marshal the updated payload
 		updatedPayload, err := json.Marshal(payload)
@@ -447,6 +520,15 @@ func createTargeter(provider Provider) vegeta.Targeter {
 		tgt.Header = http.Header{
 			"Content-Type": []string{"application/json"},
 			// "x-bf-vk":      []string{"f452b625-a65e-4dfd-b48d-0ee3ba0e8d46"},
+		}
+
+		// Add Authorization header for OpenAI
+		if provider.Name == "OpenAI" {
+			openaiApiKey := os.Getenv("OPENAI_API_KEY")
+			if openaiApiKey == "" {
+				return fmt.Errorf("OPENAI_API_KEY is not set")
+			}
+			tgt.Header.Set("Authorization", fmt.Sprintf("Bearer %s", openaiApiKey))
 		}
 
 		if provider.Name == "Portkey" {
