@@ -73,6 +73,7 @@ func main() {
 	promptFile := flag.String("prompt-file", "", "Path to a file containing the prompt to use")
 	path := flag.String("path", "chat/completions", "API path to hit (e.g., 'chat/completions' or 'embeddings')")
 	requestType := flag.String("request-type", "chat", "Type of request: 'chat' or 'embedding'")
+	host := flag.String("host", "localhost", "Host address for the API server")
 
 	// Parse the command line flags.
 	flag.Parse()
@@ -94,7 +95,7 @@ func main() {
 	}
 
 	// Initialize providers
-	providers := initializeProviders(*bigPayload, *model, *suffix, *path, *requestType, filePrompt)
+	providers := initializeProviders(*bigPayload, *model, *suffix, *path, *requestType, filePrompt, *host)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -132,7 +133,7 @@ func getProviderNames(providers []Provider) []string {
 // initializeProvider creates and configures a Provider struct based on the command-line arguments.
 // It determines the payload (small or big) and marshals it into JSON bytes.
 // Placeholders #{request_index} and #{timestamp} in the payload content will be dynamically replaced.
-func initializeProviders(bigPayload bool, model string, suffix string, apiPath string, requestType string, filePrompt string) []Provider {
+func initializeProviders(bigPayload bool, model string, suffix string, apiPath string, requestType string, filePrompt string, host string) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
@@ -211,7 +212,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 		})
 	}
 
-	baseUrl := "http://localhost:%s/%s/" + apiPath
+	baseUrl := fmt.Sprintf("http://%s:%%s/%%s/", host) + apiPath
 	openaiUrl := fmt.Sprintf("https://api.openai.com/%s", apiPath)
 
 	// Create providers - OpenAI and Bifrost for embeddings comparison
