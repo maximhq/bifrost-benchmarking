@@ -65,6 +65,7 @@ func main() {
 	// Define command line flags
 	rate := flag.Int("rate", 500, "Requests per second")
 	duration := flag.Int("duration", 10, "Duration of test in seconds")
+	timeout := flag.Int("timeout", 300, "Request timeout in seconds (should be duration + expected backend latency)")
 	outputFile := flag.String("output", "results.json", "Output file for results")
 	cooldown := flag.Int("cooldown", 60, "Cooldown period between tests in seconds")
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, portkey, braintrust, llmlite, openrouter)")
@@ -116,7 +117,7 @@ func main() {
 	}
 
 	// Run benchmarks
-	results := runBenchmarks(providers, *rate, *duration, *cooldown)
+	results := runBenchmarks(providers, *rate, *duration, *timeout, *cooldown)
 
 	// Save results
 	saveResults(results, *outputFile)
@@ -268,7 +269,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 	return providers
 }
 
-func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) []BenchmarkResult {
+func runBenchmarks(providers []Provider, rate int, duration int, timeout int, cooldown int) []BenchmarkResult {
 	results := make([]BenchmarkResult, 0, len(providers))
 
 	for i, provider := range providers {
@@ -317,7 +318,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 
 		// Create context with timeout for the attack
 		ctx, cancel := context.WithTimeout(context.Background(),
-			time.Duration(240)*time.Second) // Changed to 240s
+			time.Duration(timeout)*time.Second)
 		defer cancel()
 
 		// Run the benchmark

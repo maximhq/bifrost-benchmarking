@@ -241,6 +241,7 @@ go run benchmark.go -big-payload -provider portkey -duration 60
 | -------------- | ------ | ----------------- | --------------------------------------------------------------- |
 | `-rate`        | int    | 500               | Requests per second to send                                     |
 | `-duration`    | int    | 10                | Test duration in seconds                                        |
+| `-timeout`     | int    | 300               | Request timeout in seconds (should be duration + expected backend latency) |
 | `-output`      | string | results.json      | Output file for benchmark results                               |
 | `-cooldown`    | int    | 60                | Cooldown period between tests (seconds)                         |
 | `-provider`    | string | ""                | Specific provider to test (bifrost, litellm, portkey, helicone) |
@@ -250,6 +251,7 @@ go run benchmark.go -big-payload -provider portkey -duration 60
 | `-prompt-file` | string | ""                | Path to a file containing the prompt to use                     |
 | `-path`        | string | chat/completions  | API path to hit (e.g., 'chat/completions' or 'embeddings')      |
 | `-request-type`| string | chat              | Type of request: 'chat' or 'embedding'                          |
+| `-host`        | string | localhost         | Host address for the API server                                  |
 
 ### Advanced Examples
 
@@ -273,6 +275,16 @@ go run benchmark.go -rate 100 -duration 5 -cooldown 10
 go run benchmark.go -provider bifrost -rate 1500 -duration 120 -output bifrost_detailed.json
 # Focus test: Bifrost only, 1500 RPS for 2 minutes
 ```
+
+**High-latency backend testing:**
+
+```bash
+go run benchmark.go -provider bifrost -rate 500 -duration 600 -timeout 1200 -big-payload
+# Tests with 10 minutes of requests, 10-minute backend latency
+# Timeout set to 20 minutes to allow all requests to complete
+```
+
+> **Note on Timeout:** The `-timeout` flag should be set to `duration + expected_backend_latency + buffer`. For example, if you're running a 600-second test against a backend with 600-second latency, use `-timeout 1200` (or higher) to ensure requests don't timeout prematurely.
 
 ### Embeddings Benchmarking
 
@@ -416,7 +428,8 @@ Extended payload with comprehensive AI proxy gateway analysis questions, suitabl
 1. **"No process found on port"**: Ensure your provider is running and the `.env` file has correct ports
 2. **"Provider not found"**: Check provider name spelling (bifrost, litellm, portkey, helicone)
 3. **Memory monitoring fails**: Run with sufficient permissions to access process information
-4. **High latency/timeouts**: Reduce rate or increase server resources
+4. **"Attack for [Provider] timed out"**: Increase the `-timeout` flag. The timeout should be at least `duration + backend_latency`. For example, a 600s test with 600s backend latency needs `-timeout 1200` or higher.
+5. **High latency/timeouts**: Reduce rate or increase server resources
 
 **Debug Tips:**
 
