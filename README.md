@@ -5,6 +5,7 @@ A comprehensive command-line tool for benchmarking API providers with advanced m
 ## Features
 
 - **Multi-Provider Support**: Benchmark Bifrost, LiteLLM, Portkey, and Helicone simultaneously or individually
+- **Dual Load Testing Modes**: Test with fixed RPS (`-rate`) or concurrent users (`-users`)
 - **Advanced Metrics**: Latency percentiles, throughput, success rates, and server memory monitoring
 - **Real-time Memory Tracking**: Monitor server-side RAM usage during benchmarks
 - **Dynamic Payload Generation**: Support for small and large payloads with dynamic content injection
@@ -210,36 +211,51 @@ go build benchmark.go
 
 ### Basic Commands
 
-**Run all providers (default configuration):**
+**Run all providers with fixed RPS (rate-based mode):**
 
 ```bash
-go run benchmark.go
+go run benchmark.go -rate 500 -duration 10
 # Tests all configured providers with 500 RPS for 10 seconds each
+```
+
+**Run all providers with concurrent users (user-based mode):**
+
+```bash
+go run benchmark.go -users 100 -duration 10
+# Tests all configured providers with 100 concurrent users for 10 seconds each
 ```
 
 **Benchmark a specific provider:**
 
 ```bash
-go run benchmark.go -provider bifrost
+go run benchmark.go -provider bifrost -rate 500
 ```
 
-**High-intensity testing:**
+**High-intensity testing with RPS:**
 
 ```bash
 go run benchmark.go -rate 1000 -duration 30 -provider litellm
 ```
 
+**Concurrent user load testing:**
+
+```bash
+go run benchmark.go -users 250 -duration 60 -provider bifrost
+# 250 concurrent users for 60 seconds
+```
+
 **Large payload testing:**
 
 ```bash
-go run benchmark.go -big-payload -provider portkey -duration 60
+go run benchmark.go -big-payload -provider portkey -duration 60 -rate 100
 ```
 
 ### Command-Line Flags
 
 | Flag           | Type   | Default           | Description                                                     |
 | -------------- | ------ | ----------------- | --------------------------------------------------------------- |
-| `-rate`        | int    | 500               | Requests per second to send                                     |
+| `-rate`        | int    | 0 (required*)     | Requests per second to send (mutually exclusive with `-users`)   |
+| `-users`       | int    | 0 (required*)     | Number of concurrent users to maintain (mutually exclusive with `-rate`) |
 | `-duration`    | int    | 10                | Test duration in seconds                                        |
 | `-timeout`     | int    | 300               | Request timeout in seconds (should be duration + expected backend latency) |
 | `-output`      | string | results.json      | Output file for benchmark results                               |
@@ -253,13 +269,41 @@ go run benchmark.go -big-payload -provider portkey -duration 60
 | `-request-type`| string | chat              | Type of request: 'chat' or 'embedding'                          |
 | `-host`        | string | localhost         | Host address for the API server                                  |
 
+**\* Note:** Either `-rate` or `-users` must be provided (but not both). These flags are mutually exclusive.
+
+### Rate-Based vs Concurrent Users Testing
+
+The benchmark tool supports two different load testing modes:
+
+**Rate-Based Testing (`-rate`):**
+- Sends requests at a fixed rate (requests per second)
+- Ideal for testing stable throughput and RPS capacity
+- Example: `-rate 500` sends 500 requests/second regardless of response times
+- The actual throughput may vary based on server latency and concurrency
+
+**Concurrent Users Testing (`-users`):**
+- Maintains a fixed number of concurrent requests in flight at all times
+- Uses a semaphore-based concurrency control to ensure precise request limiting
+- As soon as one request completes, a new one is immediately dispatched
+- Ideal for simulating realistic user behavior and connection pools
+- Example: `-users 100` maintains exactly 100 concurrent requests
+- Throughput depends on server response latency: `RPS ≈ users / avg_latency`
+- More predictable and controlled than rate-based testing
+
 ### Advanced Examples
 
-**Production load simulation:**
+**Production load simulation with RPS:**
 
 ```bash
 go run benchmark.go -rate 2000 -duration 300 -cooldown 120 -big-payload
 # 2000 RPS for 5 minutes each provider, 2-minute cooldowns, large payloads
+```
+
+**Concurrent users production test:**
+
+```bash
+go run benchmark.go -users 500 -duration 300 -cooldown 120 -big-payload
+# 500 concurrent users for 5 minutes each provider, 2-minute cooldowns
 ```
 
 **Quick smoke test:**
@@ -269,19 +313,33 @@ go run benchmark.go -rate 100 -duration 5 -cooldown 10
 # Light testing: 100 RPS for 5 seconds each, 10-second cooldowns
 ```
 
-**Single provider deep dive:**
+**Single provider deep dive with RPS:**
 
 ```bash
 go run benchmark.go -provider bifrost -rate 1500 -duration 120 -output bifrost_detailed.json
 # Focus test: Bifrost only, 1500 RPS for 2 minutes
 ```
 
-**High-latency backend testing:**
+**Single provider deep dive with concurrent users:**
+
+```bash
+go run benchmark.go -provider bifrost -users 200 -duration 120 -output bifrost_users.json
+# Focus test: Bifrost with 200 concurrent users for 2 minutes
+```
+
+**High-latency backend testing with RPS:**
 
 ```bash
 go run benchmark.go -provider bifrost -rate 500 -duration 600 -timeout 1200 -big-payload
 # Tests with 10 minutes of requests, 10-minute backend latency
 # Timeout set to 20 minutes to allow all requests to complete
+```
+
+**High-latency backend testing with concurrent users:**
+
+```bash
+go run benchmark.go -provider bifrost -users 100 -duration 600 -timeout 1200 -big-payload
+# 100 concurrent users for 10 minutes with 10-minute backend latency tolerance
 ```
 
 > **Note on Timeout:** The `-timeout` flag should be set to `duration + expected_backend_latency + buffer`. For example, if you're running a 600-second test against a backend with 600-second latency, use `-timeout 1200` (or higher) to ensure requests don't timeout prematurely.
@@ -388,7 +446,11 @@ Results are saved in JSON format with detailed metrics for each provider:
 
 The tool uses:
 
-- **Vegeta**: High-performance HTTP load testing library
+- **Vegeta**: High-performance HTTP load testing library (for rate-based mode)
+- **Concurrent Package**: Custom semaphore-based concurrency control (for users mode)
+  - Maintains exactly N concurrent requests in flight
+  - Dispatches new requests immediately as others complete
+  - Provides precise control over concurrent load
 - **gopsutil**: System monitoring for memory usage tracking
 - **Dynamic Targeting**: Real-time payload generation with request indexing
 - **Concurrent Monitoring**: Parallel memory sampling during load tests
@@ -427,9 +489,11 @@ Extended payload with comprehensive AI proxy gateway analysis questions, suitabl
 
 1. **"No process found on port"**: Ensure your provider is running and the `.env` file has correct ports
 2. **"Provider not found"**: Check provider name spelling (bifrost, litellm, portkey, helicone)
-3. **Memory monitoring fails**: Run with sufficient permissions to access process information
-4. **"Attack for [Provider] timed out"**: Increase the `-timeout` flag. The timeout should be at least `duration + backend_latency`. For example, a 600s test with 600s backend latency needs `-timeout 1200` or higher.
-5. **High latency/timeouts**: Reduce rate or increase server resources
+3. **"Either --rate or --users flag must be provided"**: You must specify one of `-rate` or `-users`
+4. **"--rate and --users flags are mutually exclusive"**: Only specify one of `-rate` or `-users`, not both
+5. **Memory monitoring fails**: Run with sufficient permissions to access process information
+6. **"Attack for [Provider] timed out"**: Increase the `-timeout` flag. The timeout should be at least `duration + backend_latency`. For example, a 600s test with 600s backend latency needs `-timeout 1200` or higher.
+7. **High latency/timeouts with `-users`**: The tool maintains exactly N concurrent requests in flight. If backend latency is high, total requests = (N users × duration in seconds) / avg_latency. For example, 5 users with 1s latency over 30s = ~150 requests. Increase `-timeout` if requests are timing out.
 
 **Debug Tips:**
 

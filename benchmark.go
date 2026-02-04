@@ -20,6 +20,8 @@ import (
 	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/v3/process"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
+
+	"bifrost-benchmarks/pkg/concurrent"
 )
 
 // Provider represents an API provider to be benchmarked
@@ -63,7 +65,8 @@ type ServerMemStat struct {
 // and saves the results.
 func main() {
 	// Define command line flags
-	rate := flag.Int("rate", 500, "Requests per second")
+	rate := flag.Int("rate", 0, "Requests per second (mutually exclusive with --users)")
+	users := flag.Int("users", 0, "Number of concurrent users to maintain (mutually exclusive with --rate)")
 	duration := flag.Int("duration", 10, "Duration of test in seconds")
 	timeout := flag.Int("timeout", 300, "Request timeout in seconds (should be duration + expected backend latency)")
 	outputFile := flag.String("output", "results.json", "Output file for results")
@@ -79,6 +82,14 @@ func main() {
 
 	// Parse the command line flags.
 	flag.Parse()
+
+	// Validate that rate and users are mutually exclusive and at least one is provided
+	if *rate > 0 && *users > 0 {
+		log.Fatalf("--rate and --users flags are mutually exclusive. Provide only one.")
+	}
+	if *rate == 0 && *users == 0 {
+		log.Fatalf("Either --rate or --users flag must be provided.")
+	}
 
 	// Validate request type
 	if *requestType != "chat" && *requestType != "embedding" {
@@ -117,7 +128,7 @@ func main() {
 	}
 
 	// Run benchmarks
-	results := runBenchmarks(providers, *rate, *duration, *timeout, *cooldown)
+	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown)
 
 	// Save results
 	saveResults(results, *outputFile)
@@ -269,7 +280,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 	return providers
 }
 
-func runBenchmarks(providers []Provider, rate int, duration int, timeout int, cooldown int) []BenchmarkResult {
+func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int) []BenchmarkResult {
 	results := make([]BenchmarkResult, 0, len(providers))
 
 	for i, provider := range providers {
@@ -290,7 +301,6 @@ func runBenchmarks(providers []Provider, rate int, duration int, timeout int, co
 
 		// Define the attack
 		targeter := createTargeter(provider)
-		attacker := vegeta.NewAttacker(vegeta.Client(httpClient))
 
 		// Setup for monitoring server memory usage.
 		var serverMemStats []ServerMemStat    // Slice to store memory readings
@@ -321,32 +331,76 @@ func runBenchmarks(providers []Provider, rate int, duration int, timeout int, co
 			time.Duration(timeout)*time.Second)
 		defer cancel()
 
-		// Run the benchmark
+		// Run the benchmark based on mode
 		var metrics vegeta.Metrics
-		attackRate := vegeta.Rate{Freq: rate, Per: time.Second}
-		for res := range attacker.Attack(targeter, attackRate, time.Duration(duration)*time.Second, provider.Name) {
-			metrics.Add(res)
 
-			// Track drop reasons
-			if res.Error != "" {
-				dropReasons[res.Error]++
-			} else if res.Code != 200 {
-				dropReasons[fmt.Sprintf("HTTP %d", res.Code)]++
+		if users > 0 {
+			// Users mode: use concurrent package to maintain N concurrent requests
+			runner := concurrent.NewRunner(httpClient, users, time.Duration(duration)*time.Second,
+				createConcurrentTargeter(provider))
+			concurrentMetrics := runner.Run(ctx)
+
+			// Convert concurrent metrics to vegeta metrics format
+			metrics.Requests = uint64(concurrentMetrics.TotalRequests)
+			if concurrentMetrics.TotalRequests > 0 {
+				metrics.Success = float64(concurrentMetrics.SuccessCount) / float64(concurrentMetrics.TotalRequests)
 			}
 
-			// Check if context is done
-			select {
-			case <-ctx.Done():
-				log.Printf("Attack for %s timed out", provider.Name)
-				dropReasons["context_timeout"]++
-				goto EndAttack
-			default:
-				// Continue with the attack
+			// Calculate latency statistics
+			meanLatency := time.Duration(0)
+			if concurrentMetrics.TotalRequests > 0 {
+				meanLatency = concurrentMetrics.TotalLatency / time.Duration(concurrentMetrics.TotalRequests)
 			}
+			metrics.Latencies.Mean = meanLatency
+			metrics.Latencies.Min = concurrentMetrics.MinLatency
+			metrics.Latencies.Max = concurrentMetrics.MaxLatency
+
+			// Count status codes and failures
+			statusCodes := make(map[string]int)
+			for _, result := range concurrentMetrics.Results {
+				if result.Success {
+					statusCodes["200"]++
+				} else if result.StatusCode > 0 {
+					statusCodes[fmt.Sprintf("%d", result.StatusCode)]++
+					dropReasons[fmt.Sprintf("HTTP %d", result.StatusCode)]++
+				} else {
+					dropReasons[result.Error]++
+				}
+			}
+			metrics.StatusCodes = statusCodes
+
+			// Calculate request rate and throughput
+			metrics.Rate = float64(concurrentMetrics.TotalRequests) / float64(duration)
+			metrics.Throughput = metrics.Rate // Approximate as same as request rate
+		} else {
+			// Rate mode: use Vegeta with fixed RPS
+			attacker := vegeta.NewAttacker(vegeta.Client(httpClient))
+			pacer := vegeta.Rate{Freq: rate, Per: time.Second}
+
+			for res := range attacker.Attack(targeter, pacer, time.Duration(duration)*time.Second, provider.Name) {
+				metrics.Add(res)
+
+				// Track drop reasons
+				if res.Error != "" {
+					dropReasons[res.Error]++
+				} else if res.Code != 200 {
+					dropReasons[fmt.Sprintf("HTTP %d", res.Code)]++
+				}
+
+				// Check if context is done
+				select {
+				case <-ctx.Done():
+					log.Printf("Attack for %s timed out", provider.Name)
+					dropReasons["context_timeout"]++
+					goto EndAttack
+				default:
+					// Continue with the attack
+				}
+			}
+
+		EndAttack: // Label to jump to when the attack finishes or times out
+			metrics.Close() // Finalize metrics calculation
 		}
-
-	EndAttack: // Label to jump to when the attack finishes or times out
-		metrics.Close() // Finalize metrics calculation
 
 		// Stop server memory monitoring and wait for it to finish (only if monitoring was started).
 		if provider.Port != "" {
@@ -529,6 +583,54 @@ func createTargeter(provider Provider) vegeta.Targeter {
 		}
 
 		return nil
+	}
+}
+
+// createConcurrentTargeter creates a request generator function for the concurrent package.
+// It returns a closure that generates HTTP requests with dynamically updated payloads.
+func createConcurrentTargeter(provider Provider) func() (concurrent.Request, error) {
+	var requestCounter int64
+	var counterMutex sync.Mutex
+
+	return func() (concurrent.Request, error) {
+		// Get next message index
+		counterMutex.Lock()
+		requestCounter++
+		counterMutex.Unlock()
+
+		// Use string templating for efficient payload generation
+		updatedPayload := strings.ReplaceAll(provider.PayloadTemplate, "#{request_index}", fmt.Sprintf("%d", requestCounter))
+		updatedPayload = strings.ReplaceAll(updatedPayload, "#{timestamp}", time.Now().Format(time.RFC3339))
+
+		// Build headers
+		headers := http.Header{
+			"Content-Type": []string{"application/json"},
+		}
+
+		// Add Authorization header for OpenAI
+		if provider.Name == "OpenAI" {
+			openaiApiKey := os.Getenv("OPENAI_API_KEY")
+			if openaiApiKey == "" {
+				return concurrent.Request{}, fmt.Errorf("OPENAI_API_KEY is not set")
+			}
+			headers.Set("Authorization", fmt.Sprintf("Bearer %s", openaiApiKey))
+		}
+
+		// Add Portkey config header
+		if provider.Name == "Portkey" {
+			openaiApiKey := os.Getenv("OPENAI_API_KEY")
+			if openaiApiKey == "" {
+				return concurrent.Request{}, fmt.Errorf("OPENAI_API_KEY is not set")
+			}
+			headers.Set("x-portkey-config", fmt.Sprintf(`{"provider":"openai","api_key":"%s"}`, openaiApiKey))
+		}
+
+		return concurrent.Request{
+			Method:  "POST",
+			URL:     provider.Endpoint,
+			Headers: headers,
+			Body:    []byte(updatedPayload),
+		}, nil
 	}
 }
 
