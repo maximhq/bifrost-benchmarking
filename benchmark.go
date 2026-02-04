@@ -285,7 +285,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, timeout int, co
 
 		httpClient := &http.Client{
 			Transport: httpTransport,
-			Timeout:   240 * time.Second, // adjust as necessary
+			Timeout:   time.Duration(timeout) * time.Second,
 		}
 
 		// Define the attack
