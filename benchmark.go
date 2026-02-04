@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -16,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/joho/godotenv"
 	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/v3/process"
@@ -25,11 +25,12 @@ import (
 // Provider represents an API provider to be benchmarked
 // It holds the necessary information to target the provider's API.
 type Provider struct {
-	Name        string // Name of the provider (e.g., "bifrost", "litellm")
-	Endpoint    string // API endpoint path (e.g., "v1/chat/completions")
-	Port        string // Port number the provider's server is listening on
-	Payload     []byte // JSON payload to be used for requests
-	RequestType string // Type of request: "chat" or "embedding"
+	Name            string // Name of the provider (e.g., "bifrost", "litellm")
+	Endpoint        string // API endpoint path (e.g., "v1/chat/completions")
+	Port            string // Port number the provider's server is listening on
+	Payload         []byte // JSON payload to be used for requests
+	PayloadTemplate string // String template for efficient payload generation (pre-built with placeholders)
+	RequestType     string // Type of request: "chat" or "embedding"
 }
 
 // BenchmarkResult holds the aggregated metrics from a single benchmark run for a provider.
@@ -180,18 +181,18 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 
 	if requestType == "embedding" {
 		// Bifrost embeddings format (with openai/ prefix)
-		bifrostPayload, _ = json.Marshal(map[string]interface{}{
+		bifrostPayload, _ = sonic.Marshal(map[string]interface{}{
 			"input": promptContent,
 			"model": "openai/" + model,
 		})
 		// OpenAI embeddings format (no prefix)
-		openaiPayload, _ = json.Marshal(map[string]interface{}{
+		openaiPayload, _ = sonic.Marshal(map[string]interface{}{
 			"input": promptContent,
 			"model": model,
 		})
 	} else {
 		// Bifrost chat completion format (with openai/ prefix)
-		bifrostPayload, _ = json.Marshal(map[string]interface{}{
+		bifrostPayload, _ = sonic.Marshal(map[string]interface{}{
 			"messages": []map[string]string{
 				{
 					"role":    "user",
@@ -201,7 +202,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 			"model": "openai/" + model,
 		})
 		// OpenAI chat completion format (no prefix)
-		openaiPayload, _ = json.Marshal(map[string]interface{}{
+		openaiPayload, _ = sonic.Marshal(map[string]interface{}{
 			"messages": []map[string]string{
 				{
 					"role":    "user",
@@ -215,42 +216,52 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 	baseUrl := fmt.Sprintf("http://%s:%%s/%%s/", host) + apiPath
 	openaiUrl := fmt.Sprintf("https://api.openai.com/%s", apiPath)
 
+	// Helper function to create payload template from bytes
+	createTemplate := func(payloadBytes []byte) string {
+		return string(payloadBytes)
+	}
+
 	// Create providers - OpenAI and Bifrost for embeddings comparison
 	providers := []Provider{
 		{
-			Name:        "OpenAI",
-			Endpoint:    openaiUrl,
-			Port:        "", // OpenAI is not localhost, so no port monitoring
-			Payload:     openaiPayload,
-			RequestType: requestType,
+			Name:            "OpenAI",
+			Endpoint:        openaiUrl,
+			Port:            "", // OpenAI is not localhost, so no port monitoring
+			Payload:         openaiPayload,
+			PayloadTemplate: createTemplate(openaiPayload),
+			RequestType:     requestType,
 		},
 		{
-			Name:        "Bifrost",
-			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("BIFROST_PORT"), suffix),
-			Port:        os.Getenv("BIFROST_PORT"),
-			Payload:     bifrostPayload,
-			RequestType: requestType,
+			Name:            "Bifrost",
+			Endpoint:        fmt.Sprintf(baseUrl, os.Getenv("BIFROST_PORT"), suffix),
+			Port:            os.Getenv("BIFROST_PORT"),
+			Payload:         bifrostPayload,
+			PayloadTemplate: createTemplate(bifrostPayload),
+			RequestType:     requestType,
 		},
 		{
-			Name:        "Litellm",
-			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT"), suffix),
-			Port:        os.Getenv("LITELLM_PORT"),
-			Payload:     bifrostPayload, // Use bifrost payload format (with prefix)
-			RequestType: requestType,
+			Name:            "Litellm",
+			Endpoint:        fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT"), suffix),
+			Port:            os.Getenv("LITELLM_PORT"),
+			Payload:         bifrostPayload, // Use bifrost payload format (with prefix)
+			PayloadTemplate: createTemplate(bifrostPayload),
+			RequestType:     requestType,
 		},
 		{
-			Name:        "Portkey",
-			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT"), suffix),
-			Port:        os.Getenv("PORTKEY_PORT"),
-			Payload:     bifrostPayload, // Use bifrost payload format (with prefix)
-			RequestType: requestType,
+			Name:            "Portkey",
+			Endpoint:        fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT"), suffix),
+			Port:            os.Getenv("PORTKEY_PORT"),
+			Payload:         bifrostPayload, // Use bifrost payload format (with prefix)
+			PayloadTemplate: createTemplate(bifrostPayload),
+			RequestType:     requestType,
 		},
 		{
-			Name:        "Helicone",
-			Endpoint:    fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT"), suffix),
-			Port:        os.Getenv("HELICONE_PORT"),
-			Payload:     bifrostPayload, // Use bifrost payload format (with prefix)
-			RequestType: requestType,
+			Name:            "Helicone",
+			Endpoint:        fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT"), suffix),
+			Port:            os.Getenv("HELICONE_PORT"),
+			Payload:         bifrostPayload, // Use bifrost payload format (with prefix)
+			PayloadTemplate: createTemplate(bifrostPayload),
+			RequestType:     requestType,
 		},
 	}
 
@@ -426,11 +437,11 @@ func getProcessByPort(port string) (*process.Process, error) {
 }
 
 // monitorServerMemory periodically collects memory statistics of the given server process.
-// It samples memory usage (RSS, VMS, percent) at 100ms intervals.
+// It samples memory usage (RSS, VMS, percent) at 500ms intervals.
 // The collected stats are appended to the shared `stats` slice, protected by a mutex.
 // Monitoring stops when a signal is received on the `stop` channel.
 func monitorServerMemory(p *process.Process, stop <-chan struct{}, stats *[]ServerMemStat, mutex *sync.Mutex) {
-	ticker := time.NewTicker(100 * time.Millisecond) // Collect memory stats every 100ms
+	ticker := time.NewTicker(500 * time.Millisecond) // Collect memory stats every 500ms
 	defer ticker.Stop()
 
 	for {
@@ -470,6 +481,7 @@ func monitorServerMemory(p *process.Process, stop <-chan struct{}, stats *[]Serv
 // This function is called by Vegeta for each request it makes.
 // It dynamically updates the payload content by replacing placeholders
 // `#{request_index}` and `#{timestamp}` with runtime values.
+// Uses efficient string templating instead of JSON marshal/unmarshal.
 // It also sets up HTTP method, URL, body, and headers for the request.
 // Special handling for "portkey" provider includes adding an `x-portkey-config` header.
 func createTargeter(provider Provider) vegeta.Targeter {
@@ -483,41 +495,15 @@ func createTargeter(provider Provider) vegeta.Targeter {
 		requestCounter++
 		counterMutex.Unlock()
 
-		// Create payload with the selected message
-		var payload map[string]interface{}
-		if err := json.Unmarshal(provider.Payload, &payload); err != nil {
-			return err
-		}
-
-		var text string
-		if provider.RequestType == "embedding" {
-			// For embeddings, the input field contains the text
-			text = payload["input"].(string)
-		} else {
-			// For chat completions, extract from messages
-			text = payload["messages"].([]interface{})[0].(map[string]interface{})["content"].(string)
-		}
-
-		// Replace placeholders with values
-		updatedText := strings.ReplaceAll(text, "#{request_index}", fmt.Sprintf("%d", requestCounter))
-		updatedText = strings.ReplaceAll(updatedText, "#{timestamp}", time.Now().Format(time.RFC3339))
-
-		if provider.RequestType == "embedding" {
-			payload["input"] = updatedText
-		} else {
-			payload["messages"].([]interface{})[0].(map[string]interface{})["content"] = updatedText
-		}
-
-		// Marshal the updated payload
-		updatedPayload, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
+		// Use string templating for efficient payload generation
+		// Replace placeholders directly in the template string
+		updatedPayload := strings.ReplaceAll(provider.PayloadTemplate, "#{request_index}", fmt.Sprintf("%d", requestCounter))
+		updatedPayload = strings.ReplaceAll(updatedPayload, "#{timestamp}", time.Now().Format(time.RFC3339))
 
 		// Set up the Vegeta target properties.
 		tgt.Method = "POST"
 		tgt.URL = provider.Endpoint
-		tgt.Body = updatedPayload
+		tgt.Body = []byte(updatedPayload)
 		tgt.Header = http.Header{
 			"Content-Type": []string{"application/json"},
 			// "x-bf-vk":      []string{"f452b625-a65e-4dfd-b48d-0ee3ba0e8d46"},
@@ -576,7 +562,7 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 		if err != nil {
 			log.Printf("Warning: Could not read existing results file: %v", err)
 		} else {
-			if err := json.Unmarshal(fileData, &resultsMap); err != nil {
+			if err := sonic.Unmarshal(fileData, &resultsMap); err != nil {
 				log.Printf("Warning: Could not parse existing results file: %v", err)
 				resultsMap = make(map[string]SerializableResult)
 			}
@@ -624,7 +610,7 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 	}
 
 	// Marshal the updated resultsMap to JSON with indentation.
-	jsonData, err := json.MarshalIndent(resultsMap, "", "  ")
+	jsonData, err := sonic.MarshalIndent(resultsMap, "", "  ")
 	if err != nil {
 		log.Fatalf("Error marshaling results: %v", err)
 	}
