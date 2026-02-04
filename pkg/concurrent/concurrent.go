@@ -50,6 +50,8 @@ type Runner struct {
 	metrics        *Metrics
 	semaphore      chan struct{}
 	wg             sync.WaitGroup
+	rampUp         bool
+	rampUpDuration time.Duration
 }
 
 // NewRunner creates a new concurrent request runner.
@@ -66,15 +68,27 @@ func NewRunner(client *http.Client, numUsers int, duration time.Duration, reques
 	}
 }
 
+// WithRampUp configures ramp-up behavior for the runner.
+func (r *Runner) WithRampUp(rampUpDuration time.Duration) *Runner {
+	r.rampUp = true
+	r.rampUpDuration = rampUpDuration
+	return r
+}
+
 // Run executes the concurrent request benchmark and returns metrics.
 func (r *Runner) Run(ctx context.Context) *Metrics {
 	ctx, cancel := context.WithTimeout(ctx, r.duration)
 	defer cancel()
 
-	// Start workers
-	for i := 0; i < r.numUsers; i++ {
-		r.wg.Add(1)
-		go r.worker(ctx)
+	if r.rampUp {
+		// Run with ramp-up: gradually increase workers over ramp-up duration
+		r.runWithRampUp(ctx)
+	} else {
+		// Run with all workers immediately
+		for i := 0; i < r.numUsers; i++ {
+			r.wg.Add(1)
+			go r.worker(ctx)
+		}
 	}
 
 	// Wait for all workers to complete
@@ -86,6 +100,60 @@ func (r *Runner) Run(ctx context.Context) *Metrics {
 	}
 
 	return r.metrics
+}
+
+// runWithRampUp gradually increases the number of workers from 0 to numUsers over rampUpDuration.
+func (r *Runner) runWithRampUp(ctx context.Context) {
+	startTime := time.Now()
+	workersStarted := 0
+
+	// Start ramp-up ticker
+	rampUpTicker := time.NewTicker(100 * time.Millisecond)
+	defer rampUpTicker.Stop()
+
+	rampUpStarted := false
+
+	for {
+		select {
+		case <-rampUpTicker.C:
+			elapsed := time.Since(startTime)
+
+			if !rampUpStarted {
+				rampUpStarted = true
+				// Start first worker immediately
+				r.wg.Add(1)
+				go r.worker(ctx)
+				workersStarted = 1
+				continue
+			}
+
+			if elapsed < r.rampUpDuration {
+				// Ramp-up phase: gradually increase workers
+				targetWorkers := int(float64(r.numUsers) * elapsed.Seconds() / r.rampUpDuration.Seconds())
+				if targetWorkers < 1 {
+					targetWorkers = 1
+				}
+
+				for workersStarted < targetWorkers && workersStarted < r.numUsers {
+					r.wg.Add(1)
+					go r.worker(ctx)
+					workersStarted++
+				}
+			} else {
+				// Ramp-up complete: start remaining workers
+				for workersStarted < r.numUsers {
+					r.wg.Add(1)
+					go r.worker(ctx)
+					workersStarted++
+				}
+				rampUpTicker.Stop()
+				return
+			}
+
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // worker is a worker goroutine that continuously makes requests while semaphore slots are available.

@@ -244,6 +244,13 @@ go run benchmark.go -users 250 -duration 60 -provider bifrost
 # 250 concurrent users for 60 seconds
 ```
 
+**Concurrent user load testing with ramp-up:**
+
+```bash
+go run benchmark.go -users 100 -duration 120 -ramp-up -ramp-up-duration 30 -provider bifrost
+# Gradually ramp up to 100 concurrent users over 30 seconds, then maintain for remaining 90 seconds
+```
+
 **Large payload testing:**
 
 ```bash
@@ -252,22 +259,24 @@ go run benchmark.go -big-payload -provider portkey -duration 60 -rate 100
 
 ### Command-Line Flags
 
-| Flag           | Type   | Default           | Description                                                     |
-| -------------- | ------ | ----------------- | --------------------------------------------------------------- |
-| `-rate`        | int    | 0 (required*)     | Requests per second to send (mutually exclusive with `-users`)   |
-| `-users`       | int    | 0 (required*)     | Number of concurrent users to maintain (mutually exclusive with `-rate`) |
-| `-duration`    | int    | 10                | Test duration in seconds                                        |
-| `-timeout`     | int    | 300               | Request timeout in seconds (should be duration + expected backend latency) |
-| `-output`      | string | results.json      | Output file for benchmark results                               |
-| `-cooldown`    | int    | 60                | Cooldown period between tests (seconds)                         |
-| `-provider`    | string | ""                | Specific provider to test (bifrost, litellm, portkey, helicone) |
-| `-big-payload` | bool   | false             | Use large ~10KB payloads instead of small ones                  |
-| `-model`       | string | gpt-4o-mini       | Model identifier to use in requests                             |
-| `-suffix`      | string | v1                | URL route suffix (e.g., v1, v2)                                 |
-| `-prompt-file` | string | ""                | Path to a file containing the prompt to use                     |
-| `-path`        | string | chat/completions  | API path to hit (e.g., 'chat/completions' or 'embeddings')      |
-| `-request-type`| string | chat              | Type of request: 'chat' or 'embedding'                          |
-| `-host`        | string | localhost         | Host address for the API server                                  |
+| Flag              | Type   | Default           | Description                                                                 |
+| ----------------- | ------ | ----------------- | --------------------------------------------------------------------------- |
+| `-rate`           | int    | 0 (required*)     | Requests per second to send (mutually exclusive with `-users`)              |
+| `-users`          | int    | 0 (required*)     | Number of concurrent users to maintain (mutually exclusive with `-rate`)    |
+| `-duration`       | int    | 10                | Test duration in seconds                                                   |
+| `-timeout`        | int    | 300               | Request timeout in seconds (should be duration + expected backend latency)  |
+| `-output`         | string | results.json      | Output file for benchmark results                                          |
+| `-cooldown`       | int    | 60                | Cooldown period between tests (seconds)                                    |
+| `-provider`       | string | ""                | Specific provider to test (bifrost, litellm, portkey, helicone)            |
+| `-big-payload`    | bool   | false             | Use large ~10KB payloads instead of small ones                             |
+| `-model`          | string | gpt-4o-mini       | Model identifier to use in requests                                        |
+| `-suffix`         | string | v1                | URL route suffix (e.g., v1, v2)                                            |
+| `-prompt-file`    | string | ""                | Path to a file containing the prompt to use                                |
+| `-path`           | string | chat/completions  | API path to hit (e.g., 'chat/completions' or 'embeddings')                 |
+| `-request-type`   | string | chat              | Type of request: 'chat' or 'embedding'                                     |
+| `-host`           | string | localhost         | Host address for the API server                                             |
+| `-ramp-up`        | bool   | false             | Enable gradual ramp-up of users (only with `-users`, requires `-ramp-up-duration`) |
+| `-ramp-up-duration` | int   | 0                 | Duration in seconds to ramp up to target users (only with `-users` and `-ramp-up`) |
 
 **\* Note:** Either `-rate` or `-users` must be provided (but not both). These flags are mutually exclusive.
 
@@ -289,6 +298,13 @@ The benchmark tool supports two different load testing modes:
 - Example: `-users 100` maintains exactly 100 concurrent requests
 - Throughput depends on server response latency: `RPS ≈ users / avg_latency`
 - More predictable and controlled than rate-based testing
+
+**Ramp-Up Feature (with `-users`):**
+- Gradually increase the number of concurrent users from 1 to the target over a specified duration
+- Useful for simulating realistic traffic patterns where users gradually connect
+- Example: `-users 100 -ramp-up -ramp-up-duration 30` ramps from 1 to 100 users over 30 seconds
+- Requires both `-ramp-up` and `-ramp-up-duration` flags to be used together
+- Only available with `-users` mode (not with `-rate` mode)
 
 ### Advanced Examples
 
@@ -340,6 +356,14 @@ go run benchmark.go -provider bifrost -rate 500 -duration 600 -timeout 1200 -big
 ```bash
 go run benchmark.go -provider bifrost -users 100 -duration 600 -timeout 1200 -big-payload
 # 100 concurrent users for 10 minutes with 10-minute backend latency tolerance
+```
+
+**Realistic traffic ramp-up pattern:**
+
+```bash
+go run benchmark.go -provider bifrost -users 500 -duration 600 -ramp-up -ramp-up-duration 120 -cooldown 120 -big-payload
+# Gradually ramp up to 500 users over 2 minutes, maintain for 8 minutes, cool down for 2 minutes
+# Simulates a realistic scenario where traffic gradually increases
 ```
 
 > **Note on Timeout:** The `-timeout` flag should be set to `duration + expected_backend_latency + buffer`. For example, if you're running a 600-second test against a backend with 600-second latency, use `-timeout 1200` (or higher) to ensure requests don't timeout prematurely.

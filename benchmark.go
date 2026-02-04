@@ -79,6 +79,8 @@ func main() {
 	path := flag.String("path", "chat/completions", "API path to hit (e.g., 'chat/completions' or 'embeddings')")
 	requestType := flag.String("request-type", "chat", "Type of request: 'chat' or 'embedding'")
 	host := flag.String("host", "localhost", "Host address for the API server")
+	rampUp := flag.Bool("ramp-up", false, "Enable gradual ramp-up of users (only with --users, requires --ramp-up-duration)")
+	rampUpDuration := flag.Int("ramp-up-duration", 0, "Duration in seconds to ramp up to target users (only with --users and --ramp-up)")
 
 	// Parse the command line flags.
 	flag.Parse()
@@ -89,6 +91,19 @@ func main() {
 	}
 	if *rate == 0 && *users == 0 {
 		log.Fatalf("Either --rate or --users flag must be provided.")
+	}
+
+	// Validate ramp-up flags
+	if *rampUp || *rampUpDuration > 0 {
+		if *users == 0 {
+			log.Fatalf("--ramp-up and --ramp-up-duration can only be used with --users flag.")
+		}
+		if !*rampUp || *rampUpDuration == 0 {
+			log.Fatalf("Both --ramp-up and --ramp-up-duration must be provided together.")
+		}
+		if *rampUpDuration > *duration {
+			log.Fatalf("--ramp-up-duration (%d) cannot be greater than --duration (%d).", *rampUpDuration, *duration)
+		}
 	}
 
 	// Validate request type
@@ -128,7 +143,7 @@ func main() {
 	}
 
 	// Run benchmarks
-	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown)
+	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown, *rampUp, *rampUpDuration)
 
 	// Save results
 	saveResults(results, *outputFile)
@@ -280,7 +295,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 	return providers
 }
 
-func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int) []BenchmarkResult {
+func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int, rampUp bool, rampUpDuration int) []BenchmarkResult {
 	results := make([]BenchmarkResult, 0, len(providers))
 
 	for i, provider := range providers {
@@ -338,6 +353,12 @@ func runBenchmarks(providers []Provider, rate int, users int, duration int, time
 			// Users mode: use concurrent package to maintain N concurrent requests
 			runner := concurrent.NewRunner(httpClient, users, time.Duration(duration)*time.Second,
 				createConcurrentTargeter(provider))
+
+			// Configure ramp-up if enabled
+			if rampUp {
+				runner.WithRampUp(time.Duration(rampUpDuration) * time.Second)
+			}
+
 			concurrentMetrics := runner.Run(ctx)
 
 			// Convert concurrent metrics to vegeta metrics format
