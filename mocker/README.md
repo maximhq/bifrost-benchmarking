@@ -9,8 +9,10 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **OpenAI API Compatibility**: Responds to `POST` requests at `/v1/chat/completions` and `/chat/completions` with realistic response structure
 - **OpenAI Responses API Support**: Supports the `/v1/responses` and `/responses` endpoints for OpenAI's responses API format
 - **OpenAI Embeddings API Support**: Supports the `/v1/embeddings` and `/embeddings` endpoints for embeddings
+- **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
+- **Per-Chunk Latency**: For streaming responses, latency is automatically distributed across chunks for realistic streaming behavior
 - **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag
 - **Realistic Token Usage**: Returns random but realistic token usage statistics
 - **Configurable Port**: Specify listening port via the `-port` flag
@@ -102,6 +104,14 @@ go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failur
 ```bash
 go run main.go -port 8000 -log-raw
 # Logs raw HTTP requests and responses for debugging
+```
+
+**Streaming responses for chat completions:**
+
+```bash
+go run main.go -port 8080 -latency 5000
+# Send a request with {"stream": true} to get server-sent event stream
+# Each chunk arrives with per-chunk latency (5000ms total split across chunks)
 ```
 
 ### 3. Running in Docker
@@ -207,7 +217,11 @@ The mock server supports the following endpoints:
 - `POST /v1/chat/completions` - OpenAI-compatible chat completions endpoint
 - `POST /chat/completions` - Alternative path for chat completions
 
-Both endpoints return responses in the standard OpenAI chat completion format.
+Both endpoints support both standard and streaming responses:
+- **Standard Response**: Returns a single JSON response
+- **Streaming Response**: When the request body contains `"stream": true`, returns a Server-Sent Events (SSE) stream of chunks
+
+**Note:** Streaming is only supported for the chat completions endpoints. Other endpoints (responses, embeddings) do not support streaming.
 
 ### Responses API
 
@@ -379,6 +393,108 @@ Rate-limited requests return a `429 Too Many Requests` response with an OpenAI-c
 - Simulate realistic API usage patterns where limits are enforced after certain thresholds
 - Load test rate limit handling in production-like scenarios
 
+## Streaming Responses
+
+The mock server supports Server-Sent Events (SSE) streaming for the chat completions endpoints. When a request includes `"stream": true` in the JSON body, the server returns a stream of chunks instead of a single response.
+
+**Streaming is only available for chat completions endpoints** (`/v1/chat/completions` and `/chat/completions`). Other endpoints (responses, embeddings) return standard non-streaming responses regardless of the `stream` field.
+
+### How Streaming Works
+
+1. Client sends a POST request with `"stream": true` in the request body
+2. Server responds with `Content-Type: text/event-stream`
+3. Response body contains multiple `data:` lines, each containing a JSON chunk
+4. Each chunk follows the streaming response format with a `delta` field containing partial content
+5. Stream ends with a `data: [DONE]` message
+
+### Streaming Response Format
+
+Each chunk in the stream follows this format:
+
+```json
+data: {
+  "id": "cmpl-mock12345",
+  "object": "chat.completion.chunk",
+  "created": 1640995200,
+  "model": "gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "role": "assistant",
+        "content": "word "
+      },
+      "finish_reason": null
+    }
+  ]
+}
+
+data: {
+  "id": "cmpl-mock12345",
+  "object": "chat.completion.chunk",
+  "created": 1640995200,
+  "model": "gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "next "
+      },
+      "finish_reason": null
+    }
+  ]
+}
+
+data: [DONE]
+```
+
+### Streaming with Latency
+
+When latency is configured with streaming responses, the total latency is distributed evenly across all chunks. For example:
+- With `-latency 5000` (5 seconds) and 10 chunks of content
+- Each chunk is sent with a ~500ms delay
+- Total streaming time is approximately 5 seconds
+- Provides realistic streaming behavior with proper timing
+
+**Example request with streaming:**
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello"}],
+    "model": "gpt-4o-mini",
+    "stream": true
+  }'
+```
+
+**Example Python client:**
+
+```python
+import requests
+
+response = requests.post(
+    'http://localhost:8000/v1/chat/completions',
+    json={
+        'messages': [{'role': 'user', 'content': 'Hello'}],
+        'model': 'gpt-4o-mini',
+        'stream': True
+    },
+    stream=True
+)
+
+for line in response.iter_lines():
+    if line:
+        print(line.decode('utf-8'))
+```
+
+**Use cases for streaming:**
+- Test client-side streaming response handling
+- Verify proper chunk parsing and buffering
+- Simulate realistic chat completion experiences
+- Load test streaming endpoint performance
+- Test timeout handling with long-running streams
+
 ## Raw Request/Response Logging
 
 The `-log-raw` flag enables detailed logging of raw HTTP requests and responses for debugging and inspection purposes:
@@ -440,8 +556,10 @@ This helps track when rate limiting begins during load tests.
 - **Payload Testing**: Test system behavior with different response sizes
 - **Error Handling Testing**: Simulate server failures with configurable failure rates
 - **Authentication Testing**: Test authentication flows and error handling
+- **Streaming Response Testing**: Test chat completion streaming with realistic chunk timing and distribution
 - **Development**: Local development without OpenAI API costs or rate limits
 - **Multi-Endpoint Testing**: Test chat completions, responses API, and embeddings API endpoints
+- **Rate Limit Handling**: Test rate limit behavior and retry logic with configurable TPM scenarios
 
 ## Technical Details
 

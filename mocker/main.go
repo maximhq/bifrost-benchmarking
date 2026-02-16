@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -36,6 +37,33 @@ type ErrorField struct {
 	Code    *string `json:"code,omitempty"`
 	Message string  `json:"message"`
 	Error   error   `json:"error,omitempty"`
+}
+
+// ChatCompletionRequest represents a chat completion request
+type ChatCompletionRequest struct {
+	Stream bool `json:"stream"`
+}
+
+// ChatStreamResponseChoiceDelta represents partial message information in streaming
+type ChatStreamResponseChoiceDelta struct {
+	Role    *string `json:"role,omitempty"`
+	Content *string `json:"content,omitempty"`
+}
+
+// ChatStreamResponseChoice represents a choice in the stream response
+type ChatStreamResponseChoice struct {
+	Index        int                             `json:"index"`
+	Delta        *ChatStreamResponseChoiceDelta  `json:"delta,omitempty"`
+	FinishReason *string                        `json:"finish_reason"`
+}
+
+// ChatCompletionStreamResponse represents a chunk in the streaming response
+type ChatCompletionStreamResponse struct {
+	ID      string                       `json:"id"`
+	Object  string                       `json:"object"`
+	Created int                          `json:"created"`
+	Model   string                       `json:"model"`
+	Choices []ChatStreamResponseChoice   `json:"choices"`
 }
 
 // Minimal schema for the OpenAI v1/responses API
@@ -238,6 +266,95 @@ func checkMethod(ctx *fasthttp.RequestCtx) bool {
 	return true
 }
 
+// isStreamingRequested checks if the request body contains stream: true
+func isStreamingRequested(ctx *fasthttp.RequestCtx) bool {
+	var req ChatCompletionRequest
+	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+		return false
+	}
+	return req.Stream
+}
+
+// sendStreamingResponse sends a streaming chat completion response in SSE format
+func sendStreamingResponse(ctx *fasthttp.RequestCtx, mockContent string) {
+	ctx.SetContentType("text/event-stream")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.Response.Header.Set("Cache-Control", "no-cache")
+	ctx.Response.Header.Set("Connection", "keep-alive")
+
+	// Split the content into chunks for streaming
+	words := strings.Fields(mockContent)
+	numChunks := len(words)
+
+	// Calculate per-chunk latency
+	var perChunkLatency time.Duration
+	if numChunks > 0 {
+		if jitter > 0 {
+			jitterOffset := rand.Intn(2*jitter+1) - jitter
+			actualLatency := latency + jitterOffset
+			if actualLatency < 0 {
+				actualLatency = 0
+			}
+			perChunkLatency = time.Duration(actualLatency/numChunks) * time.Millisecond
+		} else {
+			perChunkLatency = time.Duration(latency/numChunks) * time.Millisecond
+		}
+	}
+
+	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
+		for i, word := range words {
+			var finishReason *string
+			var role *string
+			var content *string
+
+			// Only send role in the first chunk
+			if i == 0 {
+				role = StrPtr("assistant")
+			}
+
+			// Send content for all chunks except the last
+			if i < len(words)-1 {
+				content = StrPtr(word + " ")
+			} else {
+				// Last chunk gets finish reason
+				finishReason = StrPtr("stop")
+			}
+
+			chunk := ChatCompletionStreamResponse{
+				ID:      "cmpl-mock12345",
+				Object:  "chat.completion.chunk",
+				Created: int(time.Now().Unix()),
+				Model:   "gpt-4o-mini",
+				Choices: []ChatStreamResponseChoice{
+					{
+						Index: 0,
+						Delta: &ChatStreamResponseChoiceDelta{
+							Role:    role,
+							Content: content,
+						},
+						FinishReason: finishReason,
+					},
+				},
+			}
+
+			data, _ := json.Marshal(chunk)
+			chunkLine := fmt.Sprintf("data: %s\n\n", string(data))
+			w.WriteString(chunkLine)
+			w.Flush()
+
+			// Apply per-chunk latency after sending the chunk
+			if perChunkLatency > 0 && i < len(words)-1 {
+				time.Sleep(perChunkLatency)
+			}
+		}
+
+		// Send the final [DONE] message
+		w.WriteString("data: [DONE]\n\n")
+		w.Flush()
+	})
+}
+
+
 func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
@@ -253,13 +370,21 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	simulateLatency()
-
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
 		mockContent = strings.Repeat(mockContent, 182)
 	}
 
+	// Check if streaming is requested
+	if isStreamingRequested(ctx) {
+		sendStreamingResponse(ctx, mockContent)
+		return
+	}
+
+	// Non-streaming requests get the full latency upfront
+	simulateLatency()
+
+	// Non-streaming response
 	mockChoiceMessage := schemas.BifrostResponseChoiceMessage{
 		Role:    schemas.ModelChatMessageRole("assistant"),
 		Content: StrPtr(mockContent),
