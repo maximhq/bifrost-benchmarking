@@ -76,14 +76,18 @@ type OpenAIEmbeddingsResponse struct {
 }
 
 var (
-	host           string
-	port           int
-	latency        int
-	jitter         int
-	bigPayload     bool
-	auth           string
-	failurePercent int
-	failureJitter  int
+	host              string
+	port              int
+	latency           int
+	jitter            int
+	bigPayload        bool
+	auth              string
+	failurePercent    int
+	failureJitter     int
+	tpm               int
+	logRaw            bool
+	startTime         time.Time
+	tpmTriggeredLogged bool
 )
 
 func init() {
@@ -95,6 +99,8 @@ func init() {
 	flag.StringVar(&auth, "auth", getEnvString("MOCKER_AUTH", ""), "Add authentication header key")
 	flag.IntVar(&failurePercent, "failure-percent", getEnvInt("MOCKER_FAILURE_PERCENT", 0), "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", getEnvInt("MOCKER_FAILURE_JITTER", 0), "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
+	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
+	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 }
 
 // Helper functions to read environment variables with defaults
@@ -171,6 +177,21 @@ func shouldFail() bool {
 	return false
 }
 
+// shouldTriggerTPM checks if TPM (429) scenario should be triggered
+func shouldTriggerTPM() bool {
+	if tpm > 0 && !startTime.IsZero() {
+		elapsedSeconds := int(time.Since(startTime).Seconds())
+		if elapsedSeconds >= tpm {
+			if !tpmTriggeredLogged {
+				log.Printf("TPM (429) scenario triggered after %d seconds", elapsedSeconds)
+				tpmTriggeredLogged = true
+			}
+			return true
+		}
+	}
+	return false
+}
+
 // sendErrorResponse sends a standardized error response
 func sendErrorResponse(ctx *fasthttp.RequestCtx, statusCode int, message string) {
 	errorResp := OpenAIError{
@@ -219,6 +240,11 @@ func checkMethod(ctx *fasthttp.RequestCtx) bool {
 
 func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+
+	if shouldTriggerTPM() {
+		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
 
@@ -271,6 +297,11 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 
 func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+
+	if shouldTriggerTPM() {
+		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
 
@@ -329,6 +360,11 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if shouldTriggerTPM() {
+		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+
 	if shouldFail() {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
@@ -383,8 +419,53 @@ func healthCheckHandler(ctx *fasthttp.RequestCtx) {
 	ctx.SetBodyString(`{"status":"healthy"}`)
 }
 
+// logRawRequest prints the raw request line, all headers, and body to stdout (only if logRaw is enabled).
+func logRawRequest(ctx *fasthttp.RequestCtx) {
+	if !logRaw {
+		return
+	}
+	req := &ctx.Request
+	// Request line: METHOD URI HTTP/VERSION
+	log.Printf("--- Raw Request ---\n%s %s %s", req.Header.Method(), req.URI().String(), req.Header.Protocol())
+	// Headers
+	req.Header.VisitAll(func(key, value []byte) {
+		log.Printf("%s: %s", key, value)
+	})
+	// Body
+	body := req.Body()
+	if len(body) > 0 {
+		log.Printf("--- Body ---\n%s", body)
+	} else {
+		log.Printf("--- Body --- (empty)")
+	}
+	log.Printf("--- End Request ---")
+}
+
+// logRawResponse prints the raw response status, headers, and body to stdout (only if logRaw is enabled).
+func logRawResponse(ctx *fasthttp.RequestCtx) {
+	if !logRaw {
+		return
+	}
+	resp := &ctx.Response
+	// Response line: HTTP/VERSION STATUS_CODE STATUS_MESSAGE
+	log.Printf("--- Raw Response ---\nHTTP/1.1 %d %s", resp.StatusCode(), fasthttp.StatusMessage(resp.StatusCode()))
+	// Headers
+	resp.Header.VisitAll(func(key, value []byte) {
+		log.Printf("%s: %s", key, value)
+	})
+	// Body
+	body := resp.Body()
+	if len(body) > 0 {
+		log.Printf("--- Body ---\n%s", body)
+	} else {
+		log.Printf("--- Body --- (empty)")
+	}
+	log.Printf("--- End Response ---")
+}
+
 // router handles routing requests to appropriate handlers
 func router(ctx *fasthttp.RequestCtx) {
+	logRawRequest(ctx)
 	path := string(ctx.Path())
 
 	switch path {
@@ -405,11 +486,16 @@ func router(ctx *fasthttp.RequestCtx) {
 func main() {
 	flag.Parse()
 
+	startTime = time.Now()
+
 	addr := fmt.Sprintf("%s:%d", host, port)
 	if jitter > 0 {
 		log.Printf("Mock OpenAI server (fasthttp) starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
 	} else {
 		log.Printf("Mock OpenAI server (fasthttp) starting on %s with latency %dms...\n", addr, latency)
+	}
+	if tpm > 0 {
+		log.Printf("TPM (429) scenario will be triggered after %d seconds", tpm)
 	}
 	log.Printf("Max request body size: 50MB")
 

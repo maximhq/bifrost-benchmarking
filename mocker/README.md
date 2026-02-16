@@ -16,6 +16,8 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Configurable Port**: Specify listening port via the `-port` flag
 - **Authentication**: Optional authentication header validation via the `-auth` flag
 - **Failure Simulation**: Configurable failure rate simulation with `-failure-percent` and `-failure-jitter` flags for testing error handling
+- **Rate Limiting Simulation**: Configurable TPM (tokens per minute) rate limit scenarios via the `-tpm` flag to simulate 429 Too Many Requests responses
+- **Raw Request/Response Logging**: Optional detailed logging of raw HTTP requests and responses via the `-log-raw` flag for debugging and inspection
 
 ## Prerequisites
 
@@ -81,11 +83,25 @@ go run main.go -port 8080 -failure-percent 10 -failure-jitter 5
 # 10% base failure rate with ±5% jitter (5-15% failure range)
 ```
 
+**Rate limiting simulation (TPM):**
+
+```bash
+go run main.go -port 8080 -tpm 30
+# Returns 429 responses after 30 seconds to simulate rate limits
+```
+
 **Complete testing setup:**
 
 ```bash
-go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -big-payload
-# Full-featured mock server with latency, jitter, auth, failure simulation, and large payloads
+go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -tpm 60 -big-payload
+# Full-featured mock server with latency, jitter, auth, failure simulation, rate limiting, and large payloads
+```
+
+**With raw request/response logging:**
+
+```bash
+go run main.go -port 8000 -log-raw
+# Logs raw HTTP requests and responses for debugging
 ```
 
 ### 3. Running in Docker
@@ -119,6 +135,8 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_AUTH`: Authentication header value to require (default: `""`)
 - `MOCKER_FAILURE_PERCENT`: Base failure percentage 0-100 (default: `0`)
 - `MOCKER_FAILURE_JITTER`: Maximum jitter in percentage points (default: `0`)
+- `MOCKER_TPM`: Seconds after which to trigger TPM (429) scenarios (default: `0`)
+- `MOCKER_LOG_RAW`: Log raw HTTP requests and responses - set to `true`, `1`, `false`, or `0` (default: `false`)
 
 **Example using environment variables:**
 
@@ -128,6 +146,7 @@ export MOCKER_LATENCY=50
 export MOCKER_JITTER=20
 export MOCKER_BIG_PAYLOAD=true
 export MOCKER_AUTH="Bearer my-secret-key"
+export MOCKER_TPM=60
 go run main.go
 ```
 
@@ -157,6 +176,7 @@ services:
       - MOCKER_JITTER=20
       - MOCKER_BIG_PAYLOAD=true
       - MOCKER_AUTH=Bearer my-secret-key
+      - MOCKER_TPM=60
 ```
 
 #### Command-Line Flags
@@ -169,6 +189,8 @@ services:
 - `-auth <auth_header>`: Authentication header value to require. Requests must include this exact value in the `Authorization` header (default: `""`)
 - `-failure-percent <percentage>`: Base failure percentage (0-100) for simulating server errors (default: `0`)
 - `-failure-jitter <percentage_points>`: Maximum jitter in percentage points to add to failure rate, creating a range of ±failure-jitter (default: `0`)
+- `-tpm <seconds>`: Seconds after which to trigger TPM (429) scenarios. After this duration, all requests return HTTP 429 Too Many Requests (default: `0`, disabled)
+- `-log-raw`: Log raw HTTP request and response bodies for debugging and inspection (default: `false`)
 
 **Note:** Command-line flags override environment variables. If `-auth` is set to an empty string (`-auth ""`), authentication is disabled. Otherwise, all requests must include the exact authentication header value.
 
@@ -329,6 +351,87 @@ Failed requests return a `500 Internal Server Error` with an OpenAI-compatible e
   }
 }
 ```
+
+## Rate Limiting Simulation (TPM)
+
+The `-tpm` flag allows you to simulate rate limiting scenarios by triggering HTTP 429 (Too Many Requests) responses after a specified number of seconds:
+
+- `-tpm`: Number of seconds before rate limiting starts (0 = disabled)
+
+**Example:** With `-tpm 30`, the server will normally accept all requests, but after 30 seconds, all requests will return HTTP 429.
+
+Rate-limited requests return a `429 Too Many Requests` response with an OpenAI-compatible error response:
+
+```json
+{
+  "event_id": "evt_mock_error_12345",
+  "error": {
+    "type": "server_error",
+    "code": "internal_server_error",
+    "message": "Rate limit exceeded. Please retry after some time."
+  }
+}
+```
+
+**Use cases for TPM simulation:**
+- Test client-side retry logic and exponential backoff handling
+- Verify that applications gracefully degrade when rate limits are encountered
+- Simulate realistic API usage patterns where limits are enforced after certain thresholds
+- Load test rate limit handling in production-like scenarios
+
+## Raw Request/Response Logging
+
+The `-log-raw` flag enables detailed logging of raw HTTP requests and responses for debugging and inspection purposes:
+
+- `-log-raw`: Enable logging of raw HTTP request and response bodies (default: `false`)
+
+**Example:**
+
+```bash
+go run main.go -port 8000 -log-raw
+```
+
+When enabled, the server logs raw request details:
+
+```
+--- Raw Request ---
+POST /v1/chat/completions HTTP/1.1
+Authorization: Bearer test-key
+Content-Type: application/json
+...
+--- Body ---
+{"messages":[{"role":"user","content":"Hello"}]}
+--- End Request ---
+```
+
+And raw response details:
+
+```
+--- Raw Response ---
+HTTP/1.1 200 OK
+Content-Type: application/json
+...
+--- Body ---
+{"id":"cmpl-mock12345","object":"chat.completion",...}
+--- End Response ---
+```
+
+**TPM Scenario Logging:**
+
+When the TPM (rate limiting) scenario is triggered, the server logs:
+
+```
+TPM (429) scenario triggered after X seconds
+```
+
+This helps track when rate limiting begins during load tests.
+
+**Use cases for raw logging:**
+- Debug client request formatting and headers
+- Inspect actual request/response bodies being sent and received
+- Troubleshoot authentication or content-type issues
+- Verify payload sizes and structure during testing
+- Monitor when TPM scenarios activate during benchmarks
 
 ## Use Cases
 

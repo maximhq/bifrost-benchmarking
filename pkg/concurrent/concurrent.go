@@ -52,10 +52,11 @@ type Runner struct {
 	wg             sync.WaitGroup
 	rampUp         bool
 	rampUpDuration time.Duration
+	debug          bool
 }
 
 // NewRunner creates a new concurrent request runner.
-func NewRunner(client *http.Client, numUsers int, duration time.Duration, requestGen func() (Request, error)) *Runner {
+func NewRunner(client *http.Client, numUsers int, duration time.Duration, requestGen func() (Request, error), debug bool) *Runner {
 	return &Runner{
 		client:     client,
 		numUsers:   numUsers,
@@ -65,6 +66,7 @@ func NewRunner(client *http.Client, numUsers int, duration time.Duration, reques
 			Results: make([]Result, 0),
 		},
 		semaphore: make(chan struct{}, numUsers),
+		debug:      debug,
 	}
 }
 
@@ -79,6 +81,11 @@ func (r *Runner) WithRampUp(rampUpDuration time.Duration) *Runner {
 func (r *Runner) Run(ctx context.Context) *Metrics {
 	ctx, cancel := context.WithTimeout(ctx, r.duration)
 	defer cancel()
+
+	// Start periodic status reporter in debug mode
+	if r.debug {
+		go r.reportStatusPeriodically(ctx)
+	}
 
 	if r.rampUp {
 		// Run with ramp-up: gradually increase workers over ramp-up duration
@@ -100,6 +107,30 @@ func (r *Runner) Run(ctx context.Context) *Metrics {
 	}
 
 	return r.metrics
+}
+
+// reportStatusPeriodically reports metrics every 30 seconds in debug mode.
+func (r *Runner) reportStatusPeriodically(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			r.metrics.mu.Lock()
+			successRate := float64(0)
+			if r.metrics.TotalRequests > 0 {
+				successRate = float64(r.metrics.SuccessCount) / float64(r.metrics.TotalRequests) * 100
+			}
+			fmt.Printf("[DEBUG STATUS] Requests: %d, Success: %d (%.1f%%), Mean Latency: %v, Max Latency: %v\n",
+				r.metrics.TotalRequests, r.metrics.SuccessCount, successRate,
+				r.metrics.TotalLatency/time.Duration(r.metrics.TotalRequests),
+				r.metrics.MaxLatency)
+			r.metrics.mu.Unlock()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // runWithRampUp gradually increases the number of workers from 0 to numUsers over rampUpDuration.
@@ -124,6 +155,9 @@ func (r *Runner) runWithRampUp(ctx context.Context) {
 				r.wg.Add(1)
 				go r.worker(ctx)
 				workersStarted = 1
+				if r.debug {
+					fmt.Printf("[DEBUG] [%.2fs] Started initial worker (total: %d)\n", elapsed.Seconds(), workersStarted)
+				}
 				continue
 			}
 
@@ -134,17 +168,29 @@ func (r *Runner) runWithRampUp(ctx context.Context) {
 					targetWorkers = 1
 				}
 
-				for workersStarted < targetWorkers && workersStarted < r.numUsers {
-					r.wg.Add(1)
-					go r.worker(ctx)
-					workersStarted++
+				if workersStarted < targetWorkers {
+					previousWorkers := workersStarted
+					for workersStarted < targetWorkers && workersStarted < r.numUsers {
+						r.wg.Add(1)
+						go r.worker(ctx)
+						workersStarted++
+					}
+					if r.debug {
+						fmt.Printf("[DEBUG] [%.2fs] Ramping up: %d -> %d workers\n", elapsed.Seconds(), previousWorkers, workersStarted)
+					}
 				}
 			} else {
 				// Ramp-up complete: start remaining workers
-				for workersStarted < r.numUsers {
-					r.wg.Add(1)
-					go r.worker(ctx)
-					workersStarted++
+				if workersStarted < r.numUsers {
+					previousWorkers := workersStarted
+					for workersStarted < r.numUsers {
+						r.wg.Add(1)
+						go r.worker(ctx)
+						workersStarted++
+					}
+					if r.debug {
+						fmt.Printf("[DEBUG] [%.2fs] Ramp-up complete: %d -> %d workers\n", elapsed.Seconds(), previousWorkers, workersStarted)
+					}
 				}
 				rampUpTicker.Stop()
 				return

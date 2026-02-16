@@ -81,6 +81,7 @@ func main() {
 	host := flag.String("host", "localhost", "Host address for the API server")
 	rampUp := flag.Bool("ramp-up", false, "Enable gradual ramp-up of users (only with --users, requires --ramp-up-duration)")
 	rampUpDuration := flag.Int("ramp-up-duration", 0, "Duration in seconds to ramp up to target users (only with --users and --ramp-up)")
+	debug := flag.Bool("debug", false, "Enable debug mode with detailed logging and periodic status updates")
 
 	// Parse the command line flags.
 	flag.Parse()
@@ -143,7 +144,7 @@ func main() {
 	}
 
 	// Run benchmarks
-	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown, *rampUp, *rampUpDuration)
+	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown, *rampUp, *rampUpDuration, *debug)
 
 	// Save results
 	saveResults(results, *outputFile)
@@ -210,7 +211,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 		// Bifrost embeddings format (with openai/ prefix)
 		bifrostPayload, _ = sonic.Marshal(map[string]interface{}{
 			"input": promptContent,
-			"model": "openai/" + model,
+			"model": model,
 		})
 		// OpenAI embeddings format (no prefix)
 		openaiPayload, _ = sonic.Marshal(map[string]interface{}{
@@ -226,7 +227,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 					"content": promptContent,
 				},
 			},
-			"model": "openai/" + model,
+			"model": model,
 		})
 		// OpenAI chat completion format (no prefix)
 		openaiPayload, _ = sonic.Marshal(map[string]interface{}{
@@ -295,7 +296,7 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 	return providers
 }
 
-func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int, rampUp bool, rampUpDuration int) []BenchmarkResult {
+func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int, rampUp bool, rampUpDuration int, debug bool) []BenchmarkResult {
 	results := make([]BenchmarkResult, 0, len(providers))
 
 	for i, provider := range providers {
@@ -352,7 +353,7 @@ func runBenchmarks(providers []Provider, rate int, users int, duration int, time
 		if users > 0 {
 			// Users mode: use concurrent package to maintain N concurrent requests
 			runner := concurrent.NewRunner(httpClient, users, time.Duration(duration)*time.Second,
-				createConcurrentTargeter(provider))
+				createConcurrentTargeter(provider), debug)
 
 			// Configure ramp-up if enabled
 			if rampUp {
