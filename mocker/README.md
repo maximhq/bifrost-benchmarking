@@ -1,6 +1,6 @@
-# Mock OpenAI API Server
+# Mock LLM API Server
 
-This directory contains a high-performance mock server built with [fasthttp](https://github.com/valyala/fasthttp) that mimics the OpenAI API endpoints. It's designed for testing and benchmarking, allowing simulation of OpenAI API responses without live server interaction.
+This directory contains a high-performance mock server built with [fasthttp](https://github.com/valyala/fasthttp) that mimics OpenAI-, Anthropic-, and GenAI-compatible endpoints. It's designed for testing and benchmarking, allowing simulation of provider API responses without live server interaction.
 
 ## Features
 
@@ -9,6 +9,9 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **OpenAI API Compatibility**: Responds to `POST` requests at `/v1/chat/completions` and `/chat/completions` with realistic response structure
 - **OpenAI Responses API Support**: Supports the `/v1/responses` and `/responses` endpoints for OpenAI's responses API format
 - **OpenAI Embeddings API Support**: Supports the `/v1/embeddings` and `/embeddings` endpoints for embeddings
+- **Anthropic Messages API Support**: Supports `POST /anthropic/v1/messages` (and `/anthropic/messages`)
+- **GenAI API Support**: Supports `POST /genai/v1beta/models/{model}:generateContent`, `POST /genai/v1/models/{model}:generateContent`, and corresponding `:streamGenerateContent` paths
+- **Provider Prefix Support**: Accepts provider-prefixed models like `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`, `vertex/gemini-2.0-flash`, `genai/gemini-2.0-flash`, etc.
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
@@ -236,6 +239,23 @@ Both endpoints return responses in the OpenAI responses API format.
 - `POST /embeddings` - Alternative path for embeddings API
 
 Both endpoints return responses in the OpenAI embeddings API format.
+
+### Anthropic Messages API
+
+- `POST /anthropic/v1/messages` - Anthropic-compatible messages endpoint
+- `POST /anthropic/messages` - Alternative path for Anthropic messages
+- `POST /v1/messages` - Anthropic client compatibility path
+
+Returns responses in Anthropic messages format.
+
+### GenAI API
+
+- `POST /genai/v1beta/models/{model}:generateContent` - GenAI-compatible content generation endpoint
+- `POST /genai/v1beta/models/{model}:streamGenerateContent` - GenAI stream endpoint (mocked as JSON response)
+- `POST /genai/v1/models/{model}:generateContent` - GenAI v1 content generation endpoint
+- `POST /genai/v1/models/{model}:streamGenerateContent` - GenAI v1 stream endpoint (mocked as JSON response)
+
+`{model}` can be raw (`gemini-2.0-flash`) or URL-escaped provider prefixed (`vertex%2Fgemini-2.0-flash`).
 
 **Note:** All endpoints support the same configuration flags (latency, jitter, auth, failure simulation, etc.) and require the same authentication header if `-auth` is set. The `/health` endpoint does not require authentication and does not simulate latency or failures.
 
