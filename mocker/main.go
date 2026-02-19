@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -39,9 +40,65 @@ type ErrorField struct {
 	Error   error   `json:"error,omitempty"`
 }
 
-// ChatCompletionRequest represents a chat completion request
-type ChatCompletionRequest struct {
-	Stream bool `json:"stream"`
+// GenericRequest represents any incoming request with a model field
+type GenericRequest struct {
+	Model  string `json:"model"`
+	Stream bool   `json:"stream"`
+}
+
+// ProviderAliases maps provider aliases to canonical provider IDs.
+var ProviderAliases = map[string]string{
+	"openai":      "openai",
+	"azure":       "azure",
+	"anthropic":   "anthropic",
+	"bedrock":     "bedrock",
+	"cohere":      "cohere",
+	"vertex":      "vertex",
+	"vertexai":    "vertex",
+	"vetex":       "vertex", // common typo
+	"google":      "vertex",
+	"genai":       "vertex",
+	"mistral":     "mistral",
+	"ollama":      "ollama",
+	"groq":        "groq",
+	"sgl":         "sgl",
+	"sglang":      "sgl",
+	"parasail":    "parasail",
+	"perplexity":  "perplexity",
+	"cerebras":    "cerebras",
+	"gemini":      "gemini",
+	"openrouter":  "openrouter",
+	"elevenlabs":  "elevenlabs",
+	"huggingface": "huggingface",
+	"nebius":      "nebius",
+	"xai":         "xai",
+	"replicate":   "replicate",
+}
+
+func parseProviderAndModel(rawModel string) (provider string, model string) {
+	model = strings.TrimSpace(rawModel)
+	if model == "" {
+		return "", "gpt-4o-mini"
+	}
+	if strings.Contains(model, "/") {
+		parts := strings.SplitN(model, "/", 2)
+		if len(parts) == 2 {
+			if canonicalProvider, ok := ProviderAliases[strings.ToLower(parts[0])]; ok {
+				return canonicalProvider, parts[1]
+			}
+		}
+	}
+	return "", model
+}
+
+// parseModelFromRequest extracts model and provider from the OpenAI-style request body.
+func parseModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, model string, stream bool) {
+	var req GenericRequest
+	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+		return "", "gpt-4o-mini", false
+	}
+	provider, model = parseProviderAndModel(req.Model)
+	return provider, model, req.Stream
 }
 
 // ChatStreamResponseChoiceDelta represents partial message information in streaming
@@ -52,18 +109,42 @@ type ChatStreamResponseChoiceDelta struct {
 
 // ChatStreamResponseChoice represents a choice in the stream response
 type ChatStreamResponseChoice struct {
-	Index        int                             `json:"index"`
-	Delta        *ChatStreamResponseChoiceDelta  `json:"delta,omitempty"`
+	Index        int                            `json:"index"`
+	Delta        *ChatStreamResponseChoiceDelta `json:"delta,omitempty"`
 	FinishReason *string                        `json:"finish_reason"`
 }
 
 // ChatCompletionStreamResponse represents a chunk in the streaming response
 type ChatCompletionStreamResponse struct {
-	ID      string                       `json:"id"`
-	Object  string                       `json:"object"`
-	Created int                          `json:"created"`
-	Model   string                       `json:"model"`
-	Choices []ChatStreamResponseChoice   `json:"choices"`
+	ID      string                     `json:"id"`
+	Object  string                     `json:"object"`
+	Created int                        `json:"created"`
+	Model   string                     `json:"model"`
+	Choices []ChatStreamResponseChoice `json:"choices"`
+}
+
+type AnthropicStreamMessage struct {
+	ID           string      `json:"id"`
+	Type         string      `json:"type"`
+	Role         string      `json:"role"`
+	Model        string      `json:"model"`
+	Content      []any       `json:"content"`
+	StopReason   interface{} `json:"stop_reason"`
+	StopSequence interface{} `json:"stop_sequence"`
+	Usage        struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage"`
+}
+
+type AnthropicContentBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type AnthropicTextDelta struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 // Minimal schema for the OpenAI v1/responses API
@@ -103,18 +184,71 @@ type OpenAIEmbeddingsResponse struct {
 	Usage  schemas.LLMUsage      `json:"usage"`  // Token usage
 }
 
+type AnthropicRequest struct {
+	Model  string `json:"model"`
+	Stream bool   `json:"stream"`
+}
+
+type AnthropicMessageContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type AnthropicMessageUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
+type AnthropicMessageResponse struct {
+	ID           string                    `json:"id"`
+	Type         string                    `json:"type"`
+	Role         string                    `json:"role"`
+	Model        string                    `json:"model"`
+	Content      []AnthropicMessageContent `json:"content"`
+	StopReason   string                    `json:"stop_reason"`
+	StopSequence interface{}               `json:"stop_sequence"`
+	Usage        AnthropicMessageUsage     `json:"usage"`
+}
+
+type GenAIPart struct {
+	Text string `json:"text"`
+}
+
+type GenAIContent struct {
+	Parts []GenAIPart `json:"parts"`
+	Role  string      `json:"role"`
+}
+
+type GenAICandidate struct {
+	Content      GenAIContent `json:"content"`
+	FinishReason string       `json:"finishReason"`
+	Index        int          `json:"index"`
+}
+
+type GenAIUsageMetadata struct {
+	PromptTokenCount     int `json:"promptTokenCount"`
+	CandidatesTokenCount int `json:"candidatesTokenCount"`
+	TotalTokenCount      int `json:"totalTokenCount"`
+}
+
+type GenAIResponse struct {
+	Candidates    []GenAICandidate   `json:"candidates"`
+	UsageMetadata GenAIUsageMetadata `json:"usageMetadata"`
+	ModelVersion  string             `json:"modelVersion"`
+}
+
 var (
-	host              string
-	port              int
-	latency           int
-	jitter            int
-	bigPayload        bool
-	auth              string
-	failurePercent    int
-	failureJitter     int
-	tpm               int
-	logRaw            bool
-	startTime         time.Time
+	host               string
+	port               int
+	latency            int
+	jitter             int
+	bigPayload         bool
+	auth               string
+	failurePercent     int
+	failureJitter      int
+	tpm                int
+	logRaw             bool
+	startTime          time.Time
 	tpmTriggeredLogged bool
 )
 
@@ -205,6 +339,92 @@ func shouldFail() bool {
 	return false
 }
 
+func parseAnthropicModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, model string, stream bool) {
+	var req AnthropicRequest
+	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+		return "", "claude-3-5-sonnet-latest", false
+	}
+	provider, model = parseProviderAndModel(req.Model)
+	if model == "" || model == "gpt-4o-mini" {
+		model = "claude-3-5-sonnet-latest"
+	}
+	return provider, model, req.Stream
+}
+
+func parseGenAIModelFromPath(path string) (provider string, model string) {
+	modelPart := ""
+	switch {
+	case strings.HasPrefix(path, "/genai/v1beta/models/"):
+		modelPart = strings.TrimPrefix(path, "/genai/v1beta/models/")
+	case strings.HasPrefix(path, "/genai/v1/models/"):
+		modelPart = strings.TrimPrefix(path, "/genai/v1/models/")
+	default:
+		return "", "gemini-2.0-flash"
+	}
+
+	if sep := strings.Index(modelPart, ":"); sep >= 0 {
+		modelPart = modelPart[:sep]
+	}
+	if decoded, err := url.PathUnescape(modelPart); err == nil {
+		modelPart = decoded
+	}
+	if modelPart == "" {
+		return "", "gemini-2.0-flash"
+	}
+	return parseProviderAndModel(modelPart)
+}
+
+func setSSEHeaders(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("text/event-stream; charset=utf-8")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.Response.Header.Set("Cache-Control", "no-cache")
+	ctx.Response.Header.Set("Connection", "keep-alive")
+	ctx.Response.Header.Set("X-Accel-Buffering", "no")
+	ctx.Response.Header.Set("Transfer-Encoding", "chunked")
+	ctx.Response.ImmediateHeaderFlush = true
+}
+
+func getStreamWords(content string) []string {
+	words := strings.Fields(content)
+	if len(words) == 0 {
+		return []string{"mock"}
+	}
+	return words
+}
+
+func getPerWordLatency(wordsCount int) time.Duration {
+	if wordsCount <= 1 {
+		return 0
+	}
+
+	actualLatency := latency
+	if jitter > 0 {
+		jitterOffset := rand.Intn(2*jitter+1) - jitter
+		actualLatency += jitterOffset
+		if actualLatency < 0 {
+			actualLatency = 0
+		}
+	}
+	if actualLatency <= 0 {
+		return 0
+	}
+	return time.Duration(actualLatency/(wordsCount-1)) * time.Millisecond
+}
+
+func writeSSEJSON(w *bufio.Writer, event string, payload any) {
+	data, _ := json.Marshal(payload)
+	if event != "" {
+		_, _ = w.WriteString("event: " + event + "\n")
+	}
+	_, _ = w.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
+	_ = w.Flush()
+}
+
+func writeSSEDataLine(w *bufio.Writer, payload string) {
+	_, _ = w.WriteString(fmt.Sprintf("data: %s\n\n", payload))
+	_ = w.Flush()
+}
+
 // shouldTriggerTPM checks if TPM (429) scenario should be triggered
 func shouldTriggerTPM() bool {
 	if tpm > 0 && !startTime.IsZero() {
@@ -266,94 +486,171 @@ func checkMethod(ctx *fasthttp.RequestCtx) bool {
 	return true
 }
 
-// isStreamingRequested checks if the request body contains stream: true
-func isStreamingRequested(ctx *fasthttp.RequestCtx) bool {
-	var req ChatCompletionRequest
-	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
-		return false
-	}
-	return req.Stream
-}
-
 // sendStreamingResponse sends a streaming chat completion response in SSE format
-func sendStreamingResponse(ctx *fasthttp.RequestCtx, mockContent string) {
-	ctx.SetContentType("text/event-stream")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	ctx.Response.Header.Set("Cache-Control", "no-cache")
-	ctx.Response.Header.Set("Connection", "keep-alive")
-
-	// Split the content into chunks for streaming
-	words := strings.Fields(mockContent)
-	numChunks := len(words)
-
-	// Calculate per-chunk latency
-	var perChunkLatency time.Duration
-	if numChunks > 0 {
-		if jitter > 0 {
-			jitterOffset := rand.Intn(2*jitter+1) - jitter
-			actualLatency := latency + jitterOffset
-			if actualLatency < 0 {
-				actualLatency = 0
-			}
-			perChunkLatency = time.Duration(actualLatency/numChunks) * time.Millisecond
-		} else {
-			perChunkLatency = time.Duration(latency/numChunks) * time.Millisecond
-		}
-	}
+func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
+	setSSEHeaders(ctx)
+	words := getStreamWords(mockContent)
+	perWordLatency := getPerWordLatency(len(words))
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
 		for i, word := range words {
-			var finishReason *string
-			var role *string
-			var content *string
-
-			// Only send role in the first chunk
+			token := word
+			if i < len(words)-1 {
+				token += " "
+			}
+			role := (*string)(nil)
 			if i == 0 {
 				role = StrPtr("assistant")
 			}
-
-			// Send content for all chunks except the last
-			if i < len(words)-1 {
-				content = StrPtr(word + " ")
-			} else {
-				// Last chunk gets finish reason
-				finishReason = StrPtr("stop")
-			}
-
 			chunk := ChatCompletionStreamResponse{
 				ID:      "cmpl-mock12345",
 				Object:  "chat.completion.chunk",
 				Created: int(time.Now().Unix()),
-				Model:   "gpt-4o-mini",
+				Model:   model,
 				Choices: []ChatStreamResponseChoice{
 					{
 						Index: 0,
 						Delta: &ChatStreamResponseChoiceDelta{
 							Role:    role,
-							Content: content,
+							Content: StrPtr(token),
 						},
-						FinishReason: finishReason,
+						FinishReason: nil,
 					},
 				},
 			}
-
-			data, _ := json.Marshal(chunk)
-			chunkLine := fmt.Sprintf("data: %s\n\n", string(data))
-			w.WriteString(chunkLine)
-			w.Flush()
-
-			// Apply per-chunk latency after sending the chunk
-			if perChunkLatency > 0 && i < len(words)-1 {
-				time.Sleep(perChunkLatency)
+			writeSSEJSON(w, "", chunk)
+			if perWordLatency > 0 && i < len(words)-1 {
+				time.Sleep(perWordLatency)
 			}
 		}
 
-		// Send the final [DONE] message
-		w.WriteString("data: [DONE]\n\n")
-		w.Flush()
+		finalChunk := ChatCompletionStreamResponse{
+			ID:      "cmpl-mock12345",
+			Object:  "chat.completion.chunk",
+			Created: int(time.Now().Unix()),
+			Model:   model,
+			Choices: []ChatStreamResponseChoice{
+				{
+					Index:        0,
+					Delta:        &ChatStreamResponseChoiceDelta{},
+					FinishReason: StrPtr("stop"),
+				},
+			},
+		}
+		writeSSEJSON(w, "", finalChunk)
+		writeSSEDataLine(w, "[DONE]")
 	})
 }
 
+func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
+	setSSEHeaders(ctx)
+	words := getStreamWords(mockContent)
+	perWordLatency := getPerWordLatency(len(words))
+
+	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
+		start := map[string]any{
+			"type": "message_start",
+			"message": AnthropicStreamMessage{
+				ID:           "msg_mock12345",
+				Type:         "message",
+				Role:         "assistant",
+				Model:        model,
+				Content:      []any{},
+				StopReason:   nil,
+				StopSequence: nil,
+			},
+		}
+		writeSSEJSON(w, "message_start", start)
+		writeSSEJSON(w, "content_block_start", map[string]any{
+			"type":          "content_block_start",
+			"index":         0,
+			"content_block": AnthropicContentBlock{Type: "text", Text: ""},
+		})
+
+		for i, word := range words {
+			token := word
+			if i < len(words)-1 {
+				token += " "
+			}
+			writeSSEJSON(w, "content_block_delta", map[string]any{
+				"type":  "content_block_delta",
+				"index": 0,
+				"delta": AnthropicTextDelta{
+					Type: "text_delta",
+					Text: token,
+				},
+			})
+			if perWordLatency > 0 && i < len(words)-1 {
+				time.Sleep(perWordLatency)
+			}
+		}
+
+		writeSSEJSON(w, "content_block_stop", map[string]any{
+			"type":  "content_block_stop",
+			"index": 0,
+		})
+		writeSSEJSON(w, "message_delta", map[string]any{
+			"type": "message_delta",
+			"delta": map[string]any{
+				"stop_reason":   "end_turn",
+				"stop_sequence": nil,
+			},
+			"usage": map[string]any{
+				"output_tokens": len(words),
+			},
+		})
+		writeSSEJSON(w, "message_stop", map[string]any{
+			"type": "message_stop",
+		})
+	})
+}
+
+func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
+	setSSEHeaders(ctx)
+	words := getStreamWords(mockContent)
+	perWordLatency := getPerWordLatency(len(words))
+
+	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
+		for i, word := range words {
+			token := word
+			if i < len(words)-1 {
+				token += " "
+			}
+			chunk := map[string]any{
+				"candidates": []map[string]any{
+					{
+						"content": map[string]any{
+							"parts": []map[string]any{{"text": token}},
+							"role":  "model",
+						},
+						"index":        0,
+						"finishReason": "",
+					},
+				},
+				"modelVersion": model,
+			}
+			writeSSEJSON(w, "", chunk)
+			if perWordLatency > 0 && i < len(words)-1 {
+				time.Sleep(perWordLatency)
+			}
+		}
+
+		finalChunk := map[string]any{
+			"candidates": []map[string]any{
+				{
+					"content": map[string]any{
+						"parts": []map[string]any{},
+						"role":  "model",
+					},
+					"index":        0,
+					"finishReason": "STOP",
+				},
+			},
+			"modelVersion": model,
+		}
+		writeSSEJSON(w, "", finalChunk)
+	})
+}
 
 func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
@@ -370,14 +667,25 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	provider, model, stream := parseModelFromRequest(ctx)
+	if provider != "" {
+		log.Printf("[chat/completions] provider=%s model=%s stream=%v", provider, model, stream)
+	} else {
+		log.Printf("[chat/completions] model=%s stream=%v", model, stream)
+	}
+
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
 		mockContent = strings.Repeat(mockContent, 182)
 	}
 
 	// Check if streaming is requested
-	if isStreamingRequested(ctx) {
-		sendStreamingResponse(ctx, mockContent)
+	if stream {
+		if provider == "anthropic" {
+			sendAnthropicStreamingResponse(ctx, model, mockContent)
+		} else {
+			sendOpenAIStreamingResponse(ctx, model, mockContent)
+		}
 		return
 	}
 
@@ -402,7 +710,7 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		ID:      "cmpl-mock12345",
 		Object:  "chat.completion",
 		Created: int(time.Now().Unix()),
-		Model:   "gpt-4o-mini",
+		Model:   model,
 		Choices: []schemas.BifrostResponseChoice{mockChoice},
 		Usage: schemas.LLMUsage{
 			PromptTokens:     randomInputTokens,
@@ -435,6 +743,13 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	provider, model, _ := parseModelFromRequest(ctx)
+	if provider != "" {
+		log.Printf("[responses] provider=%s model=%s", provider, model)
+	} else {
+		log.Printf("[responses] model=%s", model)
+	}
+
 	simulateLatency()
 
 	mockContent := "This is a mocked response from the OpenAI mocker server."
@@ -449,7 +764,7 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		ID:      "resp-mock12345",
 		Object:  "response",
 		Created: int(time.Now().Unix()),
-		Model:   "gpt-4o-mini",
+		Model:   model,
 		Output: []OpenAIResponsesOutputItem{
 			{
 				ID:   "msg_mock12345",
@@ -495,6 +810,17 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	provider, model, _ := parseModelFromRequest(ctx)
+	if model == "gpt-4o-mini" {
+		// Default for embeddings if no model specified
+		model = "text-embedding-ada-002"
+	}
+	if provider != "" {
+		log.Printf("[embeddings] provider=%s model=%s", provider, model)
+	} else {
+		log.Printf("[embeddings] model=%s", model)
+	}
+
 	simulateLatency()
 
 	embeddingDimensions := 1536
@@ -522,7 +848,7 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 	resp := OpenAIEmbeddingsResponse{
 		Object: "list",
 		Data:   embeddingData,
-		Model:  "text-embedding-ada-002",
+		Model:  model,
 		Usage: schemas.LLMUsage{
 			PromptTokens: randomPromptTokens,
 			TotalTokens:  randomPromptTokens,
@@ -533,6 +859,132 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding embeddings response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
+	}
+}
+
+func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+
+	if shouldTriggerTPM() {
+		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+
+	if shouldFail() {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
+		return
+	}
+
+	provider, model, stream := parseAnthropicModelFromRequest(ctx)
+	if provider != "" {
+		log.Printf("[anthropic/messages] provider=%s model=%s stream=%v", provider, model, stream)
+	} else {
+		log.Printf("[anthropic/messages] model=%s stream=%v", model, stream)
+	}
+
+	mockContent := "This is a mocked response from the Bifrost mocker server."
+	if bigPayload {
+		mockContent = strings.Repeat(mockContent, 182)
+	}
+
+	if stream {
+		sendAnthropicStreamingResponse(ctx, model, mockContent)
+		return
+	}
+
+	simulateLatency()
+
+	randomInputTokens := rand.Intn(1000)
+	randomOutputTokens := rand.Intn(1000)
+
+	resp := AnthropicMessageResponse{
+		ID:           "msg_mock12345",
+		Type:         "message",
+		Role:         "assistant",
+		Model:        model,
+		Content:      []AnthropicMessageContent{{Type: "text", Text: mockContent}},
+		StopReason:   "end_turn",
+		StopSequence: nil,
+		Usage: AnthropicMessageUsage{
+			InputTokens:  randomInputTokens,
+			OutputTokens: randomOutputTokens,
+		},
+	}
+
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+		log.Printf("Error encoding anthropic response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
+	}
+}
+
+func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+
+	if shouldTriggerTPM() {
+		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+
+	if shouldFail() {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
+		return
+	}
+
+	provider, model := parseGenAIModelFromPath(string(ctx.Path()))
+	isStreamPath := strings.Contains(string(ctx.Path()), ":streamGenerateContent")
+	if provider != "" {
+		log.Printf("[genai/generateContent] provider=%s model=%s stream=%v", provider, model, isStreamPath)
+	} else {
+		log.Printf("[genai/generateContent] model=%s stream=%v", model, isStreamPath)
+	}
+
+	mockContent := "This is a mocked response from the Bifrost mocker server."
+	if bigPayload {
+		mockContent = strings.Repeat(mockContent, 182)
+	}
+
+	if isStreamPath {
+		sendGenAIStreamingResponse(ctx, model, mockContent)
+		return
+	}
+
+	simulateLatency()
+
+	randomInputTokens := rand.Intn(1000)
+	randomOutputTokens := rand.Intn(1000)
+
+	resp := GenAIResponse{
+		Candidates: []GenAICandidate{
+			{
+				Content: GenAIContent{
+					Role:  "model",
+					Parts: []GenAIPart{{Text: mockContent}},
+				},
+				FinishReason: "STOP",
+				Index:        0,
+			},
+		},
+		UsageMetadata: GenAIUsageMetadata{
+			PromptTokenCount:     randomInputTokens,
+			CandidatesTokenCount: randomOutputTokens,
+			TotalTokenCount:      randomInputTokens + randomOutputTokens,
+		},
+		ModelVersion: model,
+	}
+
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+		log.Printf("Error encoding genai response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
 	}
@@ -596,13 +1048,20 @@ func router(ctx *fasthttp.RequestCtx) {
 	switch path {
 	case "/health":
 		healthCheckHandler(ctx)
-	case "/chat/completions", "/v1/chat/completions":
+	case "/chat/completions", "/v1/chat/completions", "/openai/chat/completions", "/openai/v1/chat/completions":
 		mockChatCompletionsHandler(ctx)
-	case "/responses", "/v1/responses":
+	case "/responses", "/v1/responses", "/openai/responses", "/openai/v1/responses":
 		mockResponsesHandler(ctx)
-	case "/embeddings", "/v1/embeddings":
+	case "/embeddings", "/v1/embeddings", "/openai/embeddings", "/openai/v1/embeddings":
 		mockEmbeddingsHandler(ctx)
+	case "/anthropic/v1/messages", "/anthropic/messages", "/v1/messages":
+		mockAnthropicMessagesHandler(ctx)
 	default:
+		if (strings.HasPrefix(path, "/genai/v1beta/models/") || strings.HasPrefix(path, "/genai/v1/models/")) &&
+			(strings.Contains(path, ":generateContent") || strings.Contains(path, ":streamGenerateContent")) {
+			mockGenAIGenerateContentHandler(ctx)
+			return
+		}
 		ctx.SetStatusCode(fasthttp.StatusNotFound)
 		ctx.SetBodyString("Not found")
 	}
@@ -615,9 +1074,9 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	if jitter > 0 {
-		log.Printf("Mock OpenAI server (fasthttp) starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
+		log.Printf("Mock LLM server (fasthttp) starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
 	} else {
-		log.Printf("Mock OpenAI server (fasthttp) starting on %s with latency %dms...\n", addr, latency)
+		log.Printf("Mock LLM server (fasthttp) starting on %s with latency %dms...\n", addr, latency)
 	}
 	if tpm > 0 {
 		log.Printf("TPM (429) scenario will be triggered after %d seconds", tpm)
