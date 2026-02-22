@@ -73,6 +73,7 @@ var ProviderAliases = map[string]string{
 	"nebius":      "nebius",
 	"xai":         "xai",
 	"replicate":   "replicate",
+	"vllm":        "vllm",
 }
 
 func parseProviderAndModel(rawModel string) (provider string, model string) {
@@ -237,6 +238,36 @@ type GenAIResponse struct {
 	ModelVersion  string             `json:"modelVersion"`
 }
 
+type BedrockContent struct {
+	Text string `json:"text"`
+}
+
+type BedrockMessage struct {
+	Role    string           `json:"role"`
+	Content []BedrockContent `json:"content"`
+}
+
+type BedrockConverseOutput struct {
+	Message BedrockMessage `json:"message"`
+}
+
+type BedrockUsage struct {
+	InputTokens  int `json:"inputTokens"`
+	OutputTokens int `json:"outputTokens"`
+	TotalTokens  int `json:"totalTokens"`
+}
+
+type BedrockMetrics struct {
+	LatencyMs int `json:"latencyMs"`
+}
+
+type BedrockConverseResponse struct {
+	Output     BedrockConverseOutput `json:"output"`
+	StopReason string                `json:"stopReason"`
+	Usage      BedrockUsage          `json:"usage"`
+	Metrics    BedrockMetrics        `json:"metrics"`
+}
+
 var (
 	host               string
 	port               int
@@ -244,6 +275,7 @@ var (
 	jitter             int
 	bigPayload         bool
 	auth               string
+	withErrors         bool
 	failurePercent     int
 	failureJitter      int
 	tpm                int
@@ -259,6 +291,8 @@ func init() {
 	flag.IntVar(&jitter, "jitter", getEnvInt("MOCKER_JITTER", 0), "Maximum jitter in milliseconds to add to latency (±jitter)")
 	flag.BoolVar(&bigPayload, "big-payload", getEnvBool("MOCKER_BIG_PAYLOAD", false), "Use big payload")
 	flag.StringVar(&auth, "auth", getEnvString("MOCKER_AUTH", ""), "Add authentication header key")
+	flag.BoolVar(&withErrors, "with-errors", getEnvBool("MOCKER_WITH_ERRORS", false), "Enable provider-specific random error responses")
+	flag.BoolVar(&withErrors, "witherrors", getEnvBool("MOCKER_WITH_ERRORS", false), "Alias of -with-errors")
 	flag.IntVar(&failurePercent, "failure-percent", getEnvInt("MOCKER_FAILURE_PERCENT", 0), "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", getEnvInt("MOCKER_FAILURE_JITTER", 0), "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
@@ -322,6 +356,10 @@ func simulateLatency() {
 
 // shouldFail checks if request should fail based on failure percentage with jitter
 func shouldFail() bool {
+	if withErrors {
+		// In with-errors mode, use provider-specific random errors only.
+		return false
+	}
 	if failurePercent > 0 {
 		actualFailurePercent := failurePercent
 		if failureJitter > 0 {
@@ -339,6 +377,127 @@ func shouldFail() bool {
 	return false
 }
 
+func effectiveFailurePercent() int {
+	actualFailurePercent := failurePercent
+	if withErrors && actualFailurePercent == 0 {
+		actualFailurePercent = 20
+	}
+	if failureJitter > 0 {
+		jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
+		actualFailurePercent += jitterOffset
+	}
+	if actualFailurePercent < 0 {
+		actualFailurePercent = 0
+	}
+	if actualFailurePercent > 100 {
+		actualFailurePercent = 100
+	}
+	if withErrors {
+		if actualFailurePercent < 1 {
+			actualFailurePercent = 1
+		}
+		if actualFailurePercent > 95 {
+			actualFailurePercent = 95
+		}
+	}
+	return actualFailurePercent
+}
+
+type providerErrorVariant struct {
+	Status int
+	Body   map[string]interface{}
+}
+
+func inferProviderFromPath(path string) string {
+	switch {
+	case strings.HasPrefix(path, "/anthropic/") || path == "/v1/messages":
+		return "anthropic"
+	case strings.HasPrefix(path, "/genai/"), strings.HasPrefix(path, "/models/"), strings.HasPrefix(path, "/v1/models/"), strings.HasPrefix(path, "/v1beta/models/"):
+		return "gemini"
+	case strings.HasPrefix(path, "/model/"), strings.HasPrefix(path, "/bedrock/model/"):
+		return "bedrock"
+	case strings.HasPrefix(path, "/openai/"):
+		return "openai"
+	default:
+		return "openai"
+	}
+}
+
+func providerErrorCatalog(provider string) []providerErrorVariant {
+	openAIStyle := []providerErrorVariant{
+		{Status: fasthttp.StatusBadRequest, Body: map[string]interface{}{"error": map[string]interface{}{"type": "invalid_request_error", "code": "invalid_request_error", "message": "Invalid request body"}}},
+		{Status: fasthttp.StatusUnauthorized, Body: map[string]interface{}{"error": map[string]interface{}{"type": "authentication_error", "code": "invalid_api_key", "message": "Incorrect API key provided"}}},
+		{Status: fasthttp.StatusTooManyRequests, Body: map[string]interface{}{"error": map[string]interface{}{"type": "rate_limit_error", "code": "rate_limit_exceeded", "message": "Rate limit exceeded"}}},
+		{Status: fasthttp.StatusInternalServerError, Body: map[string]interface{}{"error": map[string]interface{}{"type": "server_error", "code": "internal_server_error", "message": "Internal server error"}}},
+	}
+
+	switch provider {
+	case "anthropic":
+		return []providerErrorVariant{
+			{Status: fasthttp.StatusBadRequest, Body: map[string]interface{}{"type": "error", "error": map[string]interface{}{"type": "invalid_request_error", "message": "Invalid request"}}},
+			{Status: fasthttp.StatusUnauthorized, Body: map[string]interface{}{"type": "error", "error": map[string]interface{}{"type": "authentication_error", "message": "Invalid API key"}}},
+			{Status: fasthttp.StatusTooManyRequests, Body: map[string]interface{}{"type": "error", "error": map[string]interface{}{"type": "rate_limit_error", "message": "Rate limit exceeded"}}},
+			{Status: fasthttp.StatusInternalServerError, Body: map[string]interface{}{"type": "error", "error": map[string]interface{}{"type": "api_error", "message": "Internal server error"}}},
+		}
+	case "bedrock":
+		return []providerErrorVariant{
+			{Status: fasthttp.StatusBadRequest, Body: map[string]interface{}{"__type": "ValidationException", "message": "Malformed input request"}},
+			{Status: fasthttp.StatusUnauthorized, Body: map[string]interface{}{"__type": "UnrecognizedClientException", "message": "The security token included in the request is invalid"}},
+			{Status: fasthttp.StatusTooManyRequests, Body: map[string]interface{}{"__type": "ThrottlingException", "message": "Rate exceeded"}},
+			{Status: fasthttp.StatusServiceUnavailable, Body: map[string]interface{}{"__type": "ServiceUnavailableException", "message": "Service unavailable"}},
+		}
+	case "gemini", "vertex":
+		return []providerErrorVariant{
+			{Status: fasthttp.StatusBadRequest, Body: map[string]interface{}{"error": map[string]interface{}{"code": 400, "message": "Invalid argument", "status": "INVALID_ARGUMENT"}}},
+			{Status: fasthttp.StatusUnauthorized, Body: map[string]interface{}{"error": map[string]interface{}{"code": 401, "message": "Request had invalid authentication credentials", "status": "UNAUTHENTICATED"}}},
+			{Status: fasthttp.StatusTooManyRequests, Body: map[string]interface{}{"error": map[string]interface{}{"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}}},
+			{Status: fasthttp.StatusInternalServerError, Body: map[string]interface{}{"error": map[string]interface{}{"code": 500, "message": "Internal error", "status": "INTERNAL"}}},
+		}
+	case "cohere":
+		return []providerErrorVariant{
+			{Status: fasthttp.StatusBadRequest, Body: map[string]interface{}{"message": "invalid request", "type": "invalid_request_error"}},
+			{Status: fasthttp.StatusUnauthorized, Body: map[string]interface{}{"message": "invalid api key", "type": "authentication_error"}},
+			{Status: fasthttp.StatusTooManyRequests, Body: map[string]interface{}{"message": "too many requests", "type": "rate_limit_error"}},
+			{Status: fasthttp.StatusInternalServerError, Body: map[string]interface{}{"message": "internal error", "type": "server_error"}},
+		}
+	case "elevenlabs":
+		return []providerErrorVariant{
+			{Status: fasthttp.StatusBadRequest, Body: map[string]interface{}{"detail": map[string]interface{}{"status": "invalid_request", "message": "Invalid request"}}},
+			{Status: fasthttp.StatusUnauthorized, Body: map[string]interface{}{"detail": map[string]interface{}{"status": "unauthorized", "message": "Invalid API key"}}},
+			{Status: fasthttp.StatusTooManyRequests, Body: map[string]interface{}{"detail": map[string]interface{}{"status": "too_many_requests", "message": "Rate limit exceeded"}}},
+			{Status: fasthttp.StatusInternalServerError, Body: map[string]interface{}{"detail": map[string]interface{}{"status": "internal_server_error", "message": "Internal server error"}}},
+		}
+	default:
+		return openAIStyle
+	}
+}
+
+func maybeSendRandomProviderError(ctx *fasthttp.RequestCtx, provider string) bool {
+	if !withErrors {
+		return false
+	}
+	rate := effectiveFailurePercent()
+	if rate <= 0 || rand.Intn(100) >= rate {
+		return false
+	}
+	if provider == "" {
+		provider = inferProviderFromPath(string(ctx.Path()))
+	}
+	variants := providerErrorCatalog(provider)
+	if len(variants) == 0 {
+		return false
+	}
+	chosen := variants[rand.Intn(len(variants))]
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(chosen.Status)
+	if err := json.NewEncoder(ctx).Encode(chosen.Body); err != nil {
+		log.Printf("Error encoding provider error response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode error response")
+	}
+	return true
+}
+
 func parseAnthropicModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, model string, stream bool) {
 	var req AnthropicRequest
 	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
@@ -354,6 +513,12 @@ func parseAnthropicModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, 
 func parseGenAIModelFromPath(path string) (provider string, model string) {
 	modelPart := ""
 	switch {
+	case strings.HasPrefix(path, "/models/"):
+		modelPart = strings.TrimPrefix(path, "/models/")
+	case strings.HasPrefix(path, "/v1beta/models/"):
+		modelPart = strings.TrimPrefix(path, "/v1beta/models/")
+	case strings.HasPrefix(path, "/v1/models/"):
+		modelPart = strings.TrimPrefix(path, "/v1/models/")
 	case strings.HasPrefix(path, "/genai/v1beta/models/"):
 		modelPart = strings.TrimPrefix(path, "/genai/v1beta/models/")
 	case strings.HasPrefix(path, "/genai/v1/models/"):
@@ -369,19 +534,41 @@ func parseGenAIModelFromPath(path string) (provider string, model string) {
 		modelPart = decoded
 	}
 	if modelPart == "" {
-		return "", "gemini-2.0-flash"
+		return "gemini", "gemini-2.0-flash"
 	}
-	return parseProviderAndModel(modelPart)
+	provider, parsedModel := parseProviderAndModel(modelPart)
+	if provider == "" {
+		provider = "gemini"
+	}
+	return provider, parsedModel
+}
+
+func parseBedrockModelFromPath(path string) (model string, isConverse bool, isStream bool) {
+	trimmed := strings.TrimPrefix(path, "/bedrock")
+	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
+	if len(parts) != 3 || parts[0] != "model" {
+		return "", false, false
+	}
+	model = parts[1]
+	switch parts[2] {
+	case "converse":
+		return model, true, false
+	case "converse-stream":
+		return model, true, true
+	default:
+		return "", false, false
+	}
 }
 
 func setSSEHeaders(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/event-stream; charset=utf-8")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	ctx.Response.Header.Set("Cache-Control", "no-cache")
-	ctx.Response.Header.Set("Connection", "keep-alive")
+	ctx.Response.Header.Set("Connection", "close")
 	ctx.Response.Header.Set("X-Accel-Buffering", "no")
 	ctx.Response.Header.Set("Transfer-Encoding", "chunked")
 	ctx.Response.ImmediateHeaderFlush = true
+	ctx.SetConnectionClose()
 }
 
 func getStreamWords(content string) []string {
@@ -602,6 +789,7 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 		writeSSEJSON(w, "message_stop", map[string]any{
 			"type": "message_stop",
 		})
+		writeSSEDataLine(w, "[DONE]")
 	})
 }
 
@@ -649,6 +837,61 @@ func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCont
 			"modelVersion": model,
 		}
 		writeSSEJSON(w, "", finalChunk)
+		writeSSEDataLine(w, "[DONE]")
+	})
+}
+
+func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
+	setSSEHeaders(ctx)
+	words := getStreamWords(mockContent)
+	perWordLatency := getPerWordLatency(len(words))
+
+	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
+		writeSSEJSON(w, "", map[string]any{
+			"messageStart": map[string]any{
+				"role":  "assistant",
+				"model": model,
+			},
+		})
+
+		for i, word := range words {
+			token := word
+			if i < len(words)-1 {
+				token += " "
+			}
+			writeSSEJSON(w, "", map[string]any{
+				"contentBlockDelta": map[string]any{
+					"contentBlockIndex": 0,
+					"delta": map[string]any{
+						"text": token,
+					},
+				},
+			})
+			if perWordLatency > 0 && i < len(words)-1 {
+				time.Sleep(perWordLatency)
+			}
+		}
+
+		writeSSEJSON(w, "", map[string]any{
+			"contentBlockStop": map[string]any{
+				"contentBlockIndex": 0,
+			},
+		})
+		writeSSEJSON(w, "", map[string]any{
+			"messageStop": map[string]any{
+				"stopReason": "end_turn",
+			},
+		})
+		writeSSEJSON(w, "", map[string]any{
+			"metadata": map[string]any{
+				"usage": map[string]any{
+					"inputTokens":  rand.Intn(1000),
+					"outputTokens": len(words),
+					"totalTokens":  rand.Intn(1000) + len(words),
+				},
+			},
+		})
+		writeSSEDataLine(w, "[DONE]")
 	})
 }
 
@@ -656,9 +899,13 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
+	provider, model, stream := parseModelFromRequest(ctx)
 
 	if shouldTriggerTPM() {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
@@ -666,8 +913,6 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
-
-	provider, model, stream := parseModelFromRequest(ctx)
 	if provider != "" {
 		log.Printf("[chat/completions] provider=%s model=%s stream=%v", provider, model, stream)
 	} else {
@@ -732,9 +977,13 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
+	provider, model, _ := parseModelFromRequest(ctx)
 
 	if shouldTriggerTPM() {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
@@ -743,7 +992,6 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	provider, model, _ := parseModelFromRequest(ctx)
 	if provider != "" {
 		log.Printf("[responses] provider=%s model=%s", provider, model)
 	} else {
@@ -799,9 +1047,13 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
+	provider, model, _ := parseModelFromRequest(ctx)
 
 	if shouldTriggerTPM() {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
@@ -810,7 +1062,6 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	provider, model, _ := parseModelFromRequest(ctx)
 	if model == "gpt-4o-mini" {
 		// Default for embeddings if no model specified
 		model = "text-embedding-ada-002"
@@ -868,9 +1119,13 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
+	provider, model, stream := parseAnthropicModelFromRequest(ctx)
 
 	if shouldTriggerTPM() {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+	if maybeSendRandomProviderError(ctx, "anthropic") {
 		return
 	}
 
@@ -879,7 +1134,6 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	provider, model, stream := parseAnthropicModelFromRequest(ctx)
 	if provider != "" {
 		log.Printf("[anthropic/messages] provider=%s model=%s stream=%v", provider, model, stream)
 	} else {
@@ -928,9 +1182,14 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 	if !checkAuth(ctx) || !checkMethod(ctx) {
 		return
 	}
+	provider, model := parseGenAIModelFromPath(string(ctx.Path()))
+	isStreamPath := strings.Contains(string(ctx.Path()), ":streamGenerateContent")
 
 	if shouldTriggerTPM() {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
@@ -939,8 +1198,6 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	provider, model := parseGenAIModelFromPath(string(ctx.Path()))
-	isStreamPath := strings.Contains(string(ctx.Path()), ":streamGenerateContent")
 	if provider != "" {
 		log.Printf("[genai/generateContent] provider=%s model=%s stream=%v", provider, model, isStreamPath)
 	} else {
@@ -985,6 +1242,69 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding genai response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
+	}
+}
+
+func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+	model, isConverse, isStream := parseBedrockModelFromPath(string(ctx.Path()))
+
+	if shouldTriggerTPM() {
+		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+		return
+	}
+	if maybeSendRandomProviderError(ctx, "bedrock") {
+		return
+	}
+	if shouldFail() {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
+		return
+	}
+	if !isConverse {
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		ctx.SetBodyString("Not found")
+		return
+	}
+	if model == "" {
+		model = "amazon.nova-micro-v1:0"
+	}
+
+	log.Printf("[bedrock/converse] model=%s stream=%v", model, isStream)
+	mockContent := "This is a mocked response from the Bifrost mocker server."
+	if bigPayload {
+		mockContent = strings.Repeat(mockContent, 182)
+	}
+	if isStream {
+		sendBedrockConverseStreamingResponse(ctx, model, mockContent)
+		return
+	}
+
+	simulateLatency()
+	randomInputTokens := rand.Intn(1000)
+	randomOutputTokens := rand.Intn(1000)
+	resp := BedrockConverseResponse{
+		Output: BedrockConverseOutput{
+			Message: BedrockMessage{
+				Role:    "assistant",
+				Content: []BedrockContent{{Text: mockContent}},
+			},
+		},
+		StopReason: "end_turn",
+		Usage: BedrockUsage{
+			InputTokens:  randomInputTokens,
+			OutputTokens: randomOutputTokens,
+			TotalTokens:  randomInputTokens + randomOutputTokens,
+		},
+		Metrics: BedrockMetrics{LatencyMs: latency},
+	}
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+		log.Printf("Error encoding bedrock response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
 	}
@@ -1057,7 +1377,15 @@ func router(ctx *fasthttp.RequestCtx) {
 	case "/anthropic/v1/messages", "/anthropic/messages", "/v1/messages":
 		mockAnthropicMessagesHandler(ctx)
 	default:
-		if (strings.HasPrefix(path, "/genai/v1beta/models/") || strings.HasPrefix(path, "/genai/v1/models/")) &&
+		if _, isConverse, _ := parseBedrockModelFromPath(path); isConverse {
+			mockBedrockConverseHandler(ctx)
+			return
+		}
+		if (strings.HasPrefix(path, "/models/") ||
+			strings.HasPrefix(path, "/v1beta/models/") ||
+			strings.HasPrefix(path, "/v1/models/") ||
+			strings.HasPrefix(path, "/genai/v1beta/models/") ||
+			strings.HasPrefix(path, "/genai/v1/models/")) &&
 			(strings.Contains(path, ":generateContent") || strings.Contains(path, ":streamGenerateContent")) {
 			mockGenAIGenerateContentHandler(ctx)
 			return
