@@ -10,8 +10,10 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **OpenAI Responses API Support**: Supports the `/v1/responses` and `/responses` endpoints for OpenAI's responses API format
 - **OpenAI Embeddings API Support**: Supports the `/v1/embeddings` and `/embeddings` endpoints for embeddings
 - **Anthropic Messages API Support**: Supports `POST /anthropic/v1/messages` (and `/anthropic/messages`)
-- **GenAI API Support**: Supports `POST /genai/v1beta/models/{model}:generateContent`, `POST /genai/v1/models/{model}:generateContent`, and corresponding `:streamGenerateContent` paths
+- **GenAI API Support**: Supports `POST /models/{model}:generateContent`, `POST /v1beta/models/{model}:generateContent`, `POST /v1/models/{model}:generateContent`, and `/genai/...` equivalents, including `:streamGenerateContent`
+- **Bedrock Converse API Support**: Supports `POST /model/{model}/converse` and `POST /model/{model}/converse-stream` (also with `/bedrock` prefix)
 - **Provider Prefix Support**: Accepts provider-prefixed models like `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`, `vertex/gemini-2.0-flash`, `genai/gemini-2.0-flash`, etc.
+- **Provider-Specific Error Simulation**: `-with-errors` (or `-witherrors`) returns random provider-native error payloads/codes while keeping a success/error mix
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
@@ -148,6 +150,7 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_AUTH`: Authentication header value to require (default: `""`)
 - `MOCKER_FAILURE_PERCENT`: Base failure percentage 0-100 (default: `0`)
 - `MOCKER_FAILURE_JITTER`: Maximum jitter in percentage points (default: `0`)
+- `MOCKER_WITH_ERRORS`: Enable random provider-specific errors (default: `false`)
 - `MOCKER_TPM`: Seconds after which to trigger TPM (429) scenarios (default: `0`)
 - `MOCKER_LOG_RAW`: Log raw HTTP requests and responses - set to `true`, `1`, `false`, or `0` (default: `false`)
 
@@ -202,6 +205,7 @@ services:
 - `-auth <auth_header>`: Authentication header value to require. Requests must include this exact value in the `Authorization` header (default: `""`)
 - `-failure-percent <percentage>`: Base failure percentage (0-100) for simulating server errors (default: `0`)
 - `-failure-jitter <percentage_points>`: Maximum jitter in percentage points to add to failure rate, creating a range of ±failure-jitter (default: `0`)
+- `-with-errors` / `-witherrors`: Enable random provider-specific error payloads/codes. Defaults to 20% error rate when enabled unless `-failure-percent` is set
 - `-tpm <seconds>`: Seconds after which to trigger TPM (429) scenarios. After this duration, all requests return HTTP 429 Too Many Requests (default: `0`, disabled)
 - `-log-raw`: Log raw HTTP request and response bodies for debugging and inspection (default: `false`)
 
@@ -250,12 +254,25 @@ Returns responses in Anthropic messages format.
 
 ### GenAI API
 
+- `POST /models/{model}:generateContent` - Native Gemini-compatible content generation endpoint
+- `POST /models/{model}:streamGenerateContent` - Native Gemini-compatible stream endpoint
+- `POST /v1beta/models/{model}:generateContent` - Gemini v1beta endpoint
+- `POST /v1beta/models/{model}:streamGenerateContent` - Gemini v1beta stream endpoint
+- `POST /v1/models/{model}:generateContent` - Gemini v1 endpoint
+- `POST /v1/models/{model}:streamGenerateContent` - Gemini v1 stream endpoint
 - `POST /genai/v1beta/models/{model}:generateContent` - GenAI-compatible content generation endpoint
 - `POST /genai/v1beta/models/{model}:streamGenerateContent` - GenAI stream endpoint (mocked as JSON response)
 - `POST /genai/v1/models/{model}:generateContent` - GenAI v1 content generation endpoint
 - `POST /genai/v1/models/{model}:streamGenerateContent` - GenAI v1 stream endpoint (mocked as JSON response)
 
 `{model}` can be raw (`gemini-2.0-flash`) or URL-escaped provider prefixed (`vertex%2Fgemini-2.0-flash`).
+
+### Bedrock Converse API
+
+- `POST /model/{model}/converse` - Bedrock-compatible converse endpoint
+- `POST /model/{model}/converse-stream` - Bedrock-compatible streaming converse endpoint
+- `POST /bedrock/model/{model}/converse` - Same endpoint with `/bedrock` prefix
+- `POST /bedrock/model/{model}/converse-stream` - Same streaming endpoint with `/bedrock` prefix
 
 **Note:** All endpoints support the same configuration flags (latency, jitter, auth, failure simulation, etc.) and require the same authentication header if `-auth` is set. The `/health` endpoint does not require authentication and does not simulate latency or failures.
 
