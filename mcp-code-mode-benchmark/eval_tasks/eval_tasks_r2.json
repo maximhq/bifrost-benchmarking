@@ -1,0 +1,587 @@
+[
+  {
+    "id": "R2S1",
+    "difficulty": "simple",
+    "query": "Get the current Hacker News frontpage posts with at least 100 points. Return the titles and point counts of the top 5.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_hacker_news_frontpage"],
+    "success_criteria": "Returns 5 HN post titles with point counts",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S2",
+    "difficulty": "simple",
+    "query": "Search Hacker News for posts about 'Agent Skills'. Return the top 3 results with their titles and URLs.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["search_hackernews_posts"],
+    "success_criteria": "Returns HN search results about Agent Skills",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S3",
+    "difficulty": "simple",
+    "query": "Look up the Hacker News user 'stevekrouse' and tell me their karma score and when their account was created.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_hacker_news_user"],
+    "success_criteria": "Returns dang's karma and creation date",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S4",
+    "difficulty": "simple",
+    "query": "Get the latest 5 job postings from Hacker News. Return their titles.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_job_story_ids", "get_hacker_news_item"],
+    "success_criteria": "Returns HN job posting titles",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S5",
+    "difficulty": "simple",
+    "query": "Get the latest 3 Show HN posts from Hacker News and return their titles and authors.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_show_hn_stories", "get_hacker_news_item"],
+    "success_criteria": "Returns Show HN post titles and authors",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S6",
+    "difficulty": "simple",
+    "query": "Get the current largest item ID on Hacker News.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_max_item_id"],
+    "success_criteria": "Returns a numeric item ID",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S7",
+    "difficulty": "simple",
+    "query": "Get all teams in my Linear workspace and list their names.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["get_teams"],
+    "success_criteria": "Returns list of Linear team names",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S8",
+    "difficulty": "simple",
+    "query": "Get my current Linear user profile — return my name and email.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["get_current_user"],
+    "success_criteria": "Returns authenticated user's name and email",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S9",
+    "difficulty": "simple",
+    "query": "List all projects in my Linear workspace.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["list_linear_projects"],
+    "success_criteria": "Returns list of Linear projects",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S10",
+    "difficulty": "simple",
+    "query": "Search Linear issues with the keyword 'bug'. Return the first 5 results with their titles and states.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["search_linear_issues"],
+    "success_criteria": "Returns Linear issues matching 'bug'",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S11",
+    "difficulty": "simple",
+    "query": "List all available contact stages in our Apollo account.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["list_apollo_contact_stages"],
+    "success_criteria": "Returns Apollo contact stage names and IDs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S12",
+    "difficulty": "simple",
+    "query": "Check the Apollo API key status to confirm it's working.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["get_apollo_api_key_status"],
+    "success_criteria": "Returns API key validation result",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S13",
+    "difficulty": "simple",
+    "query": "List all users in our Apollo workspace. Return names and emails.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["list_apollo_users"],
+    "success_criteria": "Returns Apollo user list",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S14",
+    "difficulty": "simple",
+    "query": "Get the Apollo API usage stats for our account.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["view_api_usage_stats"],
+    "success_criteria": "Returns API usage/rate limit info",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S15",
+    "difficulty": "simple",
+    "query": "List all opportunity stages configured in our Apollo account.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["get_opportunity_stages"],
+    "success_criteria": "Returns deal/opportunity stage list",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S16",
+    "difficulty": "simple",
+    "query": "Search for Google Spreadsheets with 'benchmark' in the name.",
+    "expected_servers": ["GoogleSheets"],
+    "expected_tools": ["search_spreadsheets"],
+    "success_criteria": "Returns matching spreadsheet names/IDs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S17",
+    "difficulty": "simple",
+    "query": "Create a new Google Spreadsheet titled 'MCP Benchmark Results R2'.",
+    "expected_servers": ["GoogleSheets"],
+    "expected_tools": ["create_a_google_sheet"],
+    "success_criteria": "Returns spreadsheet ID/URL",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["MCP Benchmark Results R2"]}
+  },
+  {
+    "id": "R2S18",
+    "difficulty": "simple",
+    "query": "Create a SQLite table called 'benchmarks' with columns: id INTEGER PRIMARY KEY, name TEXT, score REAL, created_at TEXT. Then list all tables to confirm it was created.",
+    "expected_servers": ["SqLite"],
+    "expected_tools": ["query", "list_tables"],
+    "success_criteria": "Table 'benchmarks' created and visible in table list",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["benchmarks"]}
+  },
+  {
+    "id": "R2S19",
+    "difficulty": "simple",
+    "query": "Write a JSON file called config.json with this content: {\"app\": \"bifrost\", \"version\": \"2.0\", \"debug\": false, \"port\": 8080}",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["write_file"],
+    "success_criteria": "File config.json created with correct JSON content",
+    "side_effects": {"files": ["config.json"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S20",
+    "difficulty": "simple",
+    "query": "Create the directory structure: project/src, project/tests, project/docs. Then write a one-line README.md in the project/ directory with the text 'MCP Benchmark Project'.",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["create_directory", "write_file"],
+    "success_criteria": "Directories created and README.md written",
+    "side_effects": {"files": ["project/README.md"], "directories": ["project", "project/src", "project/tests", "project/docs"], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S21",
+    "difficulty": "simple",
+    "query": "Search the web for 'Bifrost AI gateway' and give me a one-sentence summary of what it is.",
+    "expected_servers": ["Tavily"],
+    "expected_tools": ["tavily_search"],
+    "success_criteria": "Returns a brief description of Bifrost",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S22",
+    "difficulty": "simple",
+    "query": "Search GitHub repositories matching 'mcp-server-sqlite'. Return the top 3 results with their names, stars, and descriptions.",
+    "expected_servers": ["Github"],
+    "expected_tools": ["search_repositories"],
+    "success_criteria": "Returns GitHub repos matching the search",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S23",
+    "difficulty": "simple",
+    "query": "List all Linear workflow states for the first team in our workspace.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["get_teams", "list_linear_states"],
+    "success_criteria": "Returns workflow states (e.g., Backlog, In Progress, Done)",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S24",
+    "difficulty": "simple",
+    "query": "Get today's Hacker News posts with at least 50 upvotes. Just tell me how many there are and the title of the most upvoted one.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_hackernews_today_posts"],
+    "success_criteria": "Returns count and top post title",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S25",
+    "difficulty": "simple",
+    "query": "Search Apollo for organizations matching the domain 'anthropic.com'. Return the company name and employee count.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["enrich_organization_data"],
+    "success_criteria": "Returns Anthropic org info from Apollo",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S26",
+    "difficulty": "simple",
+    "query": "Get the database schema info from our SQLite database — list all tables and their schemas.",
+    "expected_servers": ["SqLite"],
+    "expected_tools": ["db_info"],
+    "success_criteria": "Returns database schema information",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2S27",
+    "difficulty": "simple",
+    "query": "Search Notion for pages containing 'meeting'. Return the page titles.",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion_search"],
+    "success_criteria": "Returns matching Notion page titles",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M1",
+    "difficulty": "medium",
+    "query": "Get the top 5 Hacker News frontpage stories with at least 100 points, then store them in a SQLite table called 'hn_top_stories' with columns: title TEXT, points INTEGER, url TEXT.",
+    "expected_servers": ["HackerNews", "SqLite"],
+    "expected_tools": ["get_hacker_news_frontpage", "query"],
+    "success_criteria": "SQLite table created and populated with 5 HN stories",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["hn_top_stories"]}
+  },
+  {
+    "id": "R2M2",
+    "difficulty": "medium",
+    "query": "Search Hacker News for posts about 'LLM agents' and write the top 5 results (title, URL, points) to a file called hn_llm_agents.txt.",
+    "expected_servers": ["HackerNews", "FileSystem"],
+    "expected_tools": ["search_hackernews_posts", "write_file"],
+    "success_criteria": "File created with 5 HN search results",
+    "side_effects": {"files": ["hn_llm_agents.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M3",
+    "difficulty": "medium",
+    "query": "Get all teams from our Linear workspace and write them to a JSON file called linear_teams.json with each team's name and ID.",
+    "expected_servers": ["Linear", "FileSystem"],
+    "expected_tools": ["get_teams", "write_file"],
+    "success_criteria": "JSON file created with Linear teams data",
+    "side_effects": {"files": ["linear_teams.json"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M4",
+    "difficulty": "medium",
+    "query": "List all projects in Linear, then store them in a SQLite table called 'linear_projects' with columns: id TEXT, name TEXT.",
+    "expected_servers": ["Linear", "SqLite"],
+    "expected_tools": ["list_linear_projects", "query"],
+    "success_criteria": "SQLite table created with Linear project data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["linear_projects"]}
+  },
+  {
+    "id": "R2M5",
+    "difficulty": "medium",
+    "query": "Search Apollo for people at the company 'Anthropic'. Return the first 5 contacts and write their names, titles, and emails to a file called apollo_anthropic.txt.",
+    "expected_servers": ["Apollo", "FileSystem"],
+    "expected_tools": ["apollo_people_search", "write_file"],
+    "success_criteria": "File created with Apollo contact data",
+    "side_effects": {"files": ["apollo_anthropic.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M6",
+    "difficulty": "medium",
+    "query": "Get Apollo API usage stats and write the whole information to a file called apollo_usage.txt.",
+    "expected_servers": ["Apollo", "FileSystem"],
+    "expected_tools": ["view_api_usage_stats", "write_file"],
+    "success_criteria": "Text file created with Apollo usage stats",
+    "side_effects": {"files": ["apollo_usage.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M7",
+    "difficulty": "medium",
+    "query": "Search the web for 'Starlark programming language' using Tavily, then save the top 3 result URLs and titles to a SQLite table called 'search_results' with columns: title TEXT, url TEXT.",
+    "expected_servers": ["Tavily", "SqLite"],
+    "expected_tools": ["tavily_search", "query"],
+    "success_criteria": "SQLite table created with search results",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["search_results"]}
+  },
+  {
+    "id": "R2M8",
+    "difficulty": "medium",
+    "query": "Search GitHub for repositories matching 'mcp-server' and store the top 5 results (name, description, stars, url) in a SQLite table called 'github_repos'.",
+    "expected_servers": ["Github", "SqLite"],
+    "expected_tools": ["search_repositories", "query"],
+    "success_criteria": "SQLite table created with GitHub repo data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["github_repos"]}
+  },
+  {
+    "id": "R2M9",
+    "difficulty": "medium",
+    "query": "Get the latest 5 Ask HN story IDs from Hacker News, fetch each story's details, and write a summary to a file called ask_hn.txt with each story's title and author.",
+    "expected_servers": ["HackerNews", "FileSystem"],
+    "expected_tools": ["get_ask_hn_story_ids", "get_hacker_news_item", "write_file"],
+    "success_criteria": "File created with Ask HN story summaries",
+    "side_effects": {"files": ["ask_hn.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M10",
+    "difficulty": "medium",
+    "query": "Get the Hacker News user profiles for 'birkey' and 'speckx', then store their info (username, karma, about) in a SQLite table called 'hn_users'.",
+    "expected_servers": ["HackerNews", "SqLite"],
+    "expected_tools": ["get_hacker_news_user", "query"],
+    "success_criteria": "SQLite table created with 2 HN user profiles",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["hn_users"]}
+  },
+  {
+    "id": "R2M11",
+    "difficulty": "medium",
+    "query": "Create a Google Spreadsheet titled 'HN Top Stories' and add a header row with columns: Title, Points, URL. Then add the top 3 Hacker News frontpage stories as rows.",
+    "expected_servers": ["GoogleSheets", "HackerNews"],
+    "expected_tools": ["create_a_google_sheet", "get_hacker_news_frontpage", "batch_update_spreadsheet"],
+    "success_criteria": "Spreadsheet created with HN story data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["HN Top Stories"]}
+  },
+  {
+    "id": "R2M12",
+    "difficulty": "medium",
+    "query": "Search the web for 'best practices for MCP server development' and write a brief 3-bullet summary to a file called mcp_best_practices.txt.",
+    "expected_servers": ["Tavily", "FileSystem"],
+    "expected_tools": ["tavily_search", "write_file"],
+    "success_criteria": "File created with 3-bullet summary",
+    "side_effects": {"files": ["mcp_best_practices.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M13",
+    "difficulty": "medium",
+    "query": "Get all labels from the first team in our Linear workspace and write them to labels.json as a JSON array of objects with name and id.",
+    "expected_servers": ["Linear", "FileSystem"],
+    "expected_tools": ["get_teams", "get_labels", "write_file"],
+    "success_criteria": "JSON file created with Linear labels",
+    "side_effects": {"files": ["labels.json"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M14",
+    "difficulty": "medium",
+    "query": "List all Apollo account stages and all contact stages, then write both lists to a file called apollo_stages.txt formatted as two sections.",
+    "expected_servers": ["Apollo", "FileSystem"],
+    "expected_tools": ["list_apollo_account_stages", "list_apollo_contact_stages", "write_file"],
+    "success_criteria": "File created with both stage lists",
+    "side_effects": {"files": ["apollo_stages.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M15",
+    "difficulty": "medium",
+    "query": "Search Apollo for organizations matching 'OpenAI' and store the results (name, domain, employee_count) in a SQLite table called 'apollo_orgs'.",
+    "expected_servers": ["Apollo", "SqLite"],
+    "expected_tools": ["search_organizations_in_apollo", "query"],
+    "success_criteria": "SQLite table created with Apollo org data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["apollo_orgs"]}
+  },
+  {
+    "id": "R2M16",
+    "difficulty": "medium",
+    "query": "Get the recently changed items from Hacker News (updates endpoint) and write the first 10 item IDs and first 5 changed profile usernames to a file called hn_updates.txt.",
+    "expected_servers": ["HackerNews", "FileSystem"],
+    "expected_tools": ["get_hacker_news_updates", "write_file"],
+    "success_criteria": "File created with recent HN updates",
+    "side_effects": {"files": ["hn_updates.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M17",
+    "difficulty": "medium",
+    "query": "Search GitHub issues in the repo 'modelcontextprotocol/specification' with the keyword 'transport'. Return the first 5 issue titles and their states.",
+    "expected_servers": ["Github"],
+    "expected_tools": ["search_issues"],
+    "success_criteria": "Returns GitHub issues about transport",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M18",
+    "difficulty": "medium",
+    "query": "Create a Notion page titled 'R2 Benchmark Notes' with the content: 'Round 2 benchmark with 251 tools across 11 MCP servers. Testing token reduction at scale.'",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion_create_pages"],
+    "success_criteria": "Notion page created with specified content",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["R2 Benchmark Notes"]}
+  },
+  {
+    "id": "R2M19",
+    "difficulty": "medium",
+    "query": "Search the web for 'Apollo.io CRM API' and store the top 3 result titles and URLs in a SQLite table called 'web_results' with columns title TEXT, url TEXT.",
+    "expected_servers": ["Tavily", "SqLite"],
+    "expected_tools": ["tavily_search", "query"],
+    "success_criteria": "SQLite table created with web search results",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["web_results"]}
+  },
+  {
+    "id": "R2M20",
+    "difficulty": "medium",
+    "query": "Get the file listing of the current directory and write it to a file called directory_snapshot.txt.",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["list_directory", "write_file"],
+    "success_criteria": "File created with directory listing",
+    "side_effects": {"files": ["directory_snapshot.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M21",
+    "difficulty": "medium",
+    "query": "Search Apollo for people with the title 'CTO' and store the first 5 results (name, title, company) in a SQLite table called 'apollo_ctos'.",
+    "expected_servers": ["Apollo", "SqLite"],
+    "expected_tools": ["apollo_people_search", "query"],
+    "success_criteria": "SQLite table created with Apollo CTO contacts",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["apollo_ctos"]}
+  },
+  {
+    "id": "R2M22",
+    "difficulty": "medium",
+    "query": "Get all Linear workflow states for the first team, then create a SQLite table called 'linear_states' with columns: id TEXT, name TEXT, type TEXT and insert all states.",
+    "expected_servers": ["Linear", "SqLite"],
+    "expected_tools": ["get_teams", "list_linear_states", "query"],
+    "success_criteria": "SQLite table created with Linear workflow states",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["linear_states"]}
+  },
+  {
+    "id": "R2M23",
+    "difficulty": "medium",
+    "query": "Search Hacker News for posts about 'Rust programming' by type 'story', and write a file called hn_rust.json containing the top 5 results as a JSON array with fields: title, author, points, url.",
+    "expected_servers": ["HackerNews", "FileSystem"],
+    "expected_tools": ["search_hackernews_posts", "write_file"],
+    "success_criteria": "JSON file created with HN Rust story data",
+    "side_effects": {"files": ["hn_rust.json"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2M24",
+    "difficulty": "medium",
+    "query": "Get the latest 3 new stories from Hacker News, fetch their details, and store them in a SQLite table called 'hn_latest' with columns: id INTEGER, title TEXT, author TEXT, score INTEGER, url TEXT.",
+    "expected_servers": ["HackerNews", "SqLite"],
+    "expected_tools": ["get_new_hacker_news_stories", "get_hacker_news_item", "query"],
+    "success_criteria": "SQLite table created with latest HN stories",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["hn_latest"]}
+  },
+  {
+    "id": "R2M25",
+    "difficulty": "medium",
+    "query": "Create a Linear issue titled 'Benchmark R2: Investigate token inflation' with description 'Investigate queries where Code Mode ON uses more tokens than OFF.' in the first team of our workspace.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["get_teams", "create_linear_issue"],
+    "success_criteria": "Linear issue created with correct title and description",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "linear_issues": ["Benchmark R2: Investigate token inflation"]}
+  },
+  {
+    "id": "R2H1",
+    "difficulty": "medium",
+    "query": "Get the Hacker News frontpage posts with 100+ points, search GitHub for repos matching the title of the top post, and write the GitHub search results (repo name, stars, description) to a file called hn_github_crossref.txt.",
+    "expected_servers": ["HackerNews", "Github", "FileSystem"],
+    "expected_tools": ["get_hacker_news_frontpage", "search_repositories", "write_file"],
+    "success_criteria": "File created with GitHub repos related to top HN post",
+    "side_effects": {"files": ["hn_github_crossref.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2H2",
+    "difficulty": "medium",
+    "query": "Get all Linear teams and their members, then search Apollo for the email domain of the first team member found. Write a brief report to team_lookup.txt.",
+    "expected_servers": ["Linear", "Apollo", "FileSystem"],
+    "expected_tools": ["get_teams", "apollo_people_search", "write_file"],
+    "success_criteria": "File created with cross-referenced team/Apollo data",
+    "side_effects": {"files": ["team_lookup.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2H3",
+    "difficulty": "medium",
+    "query": "Search the web for 'top AI startups 2025', get the top 3 results, then search Apollo for organizations matching each company name. Store all results in a SQLite table called 'ai_startups' with columns: name TEXT, domain TEXT, source TEXT.",
+    "expected_servers": ["Tavily", "Apollo", "SqLite"],
+    "expected_tools": ["tavily_search", "search_organizations_in_apollo", "query"],
+    "success_criteria": "SQLite table with AI startup data from web + Apollo",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["ai_startups"]}
+  },
+  {
+    "id": "R2H4",
+    "difficulty": "medium",
+    "query": "Get the top 3 HN frontpage stories, search the web for more context on the #1 story using Tavily, and write a combined summary (title, HN points, and web context in under 100 words) to hn_deep_dive.txt.",
+    "expected_servers": ["HackerNews", "Tavily", "FileSystem"],
+    "expected_tools": ["get_hacker_news_frontpage", "tavily_search", "write_file"],
+    "success_criteria": "File with HN story + web context summary",
+    "side_effects": {"files": ["hn_deep_dive.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2H5",
+    "difficulty": "medium",
+    "query": "Get all Linear projects, get all Apollo opportunity stages, and create a SQLite table called 'pipeline_mapping' with columns: linear_project TEXT, apollo_stage TEXT. Insert one row per Linear project, paired with 'Prospecting' as the default Apollo stage.",
+    "expected_servers": ["Linear", "Apollo", "SqLite"],
+    "expected_tools": ["list_linear_projects", "get_opportunity_stages", "query"],
+    "success_criteria": "SQLite table mapping Linear projects to Apollo stages",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["pipeline_mapping"]}
+  },
+  {
+    "id": "R2H6",
+    "difficulty": "medium",
+    "query": "Search GitHub for repos matching 'hacker-news-api', then search HN for posts about the top repo's name. Write both result sets to a file called github_hn_crossref.txt.",
+    "expected_servers": ["Github", "HackerNews", "FileSystem"],
+    "expected_tools": ["search_repositories", "search_hackernews_posts", "write_file"],
+    "success_criteria": "File with GitHub repos and related HN discussions",
+    "side_effects": {"files": ["github_hn_crossref.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2H7",
+    "difficulty": "medium",
+    "query": "Create a Google Spreadsheet titled 'Apollo Contacts Export', add headers (Name, Title, Company, Email), then search Apollo for 3 people at 'Google' and add them as rows.",
+    "expected_servers": ["GoogleSheets", "Apollo"],
+    "expected_tools": ["create_a_google_sheet", "apollo_people_search", "batch_update_spreadsheet"],
+    "success_criteria": "Spreadsheet created with Apollo contact data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["Apollo Contacts Export"]}
+  },
+  {
+    "id": "R2H8",
+    "difficulty": "medium",
+    "query": "Search HN for posts about 'MCP server', get the top result's details, and create a Notion page titled 'MCP on HN' summarizing the post (title, author, points, and a one-line description).",
+    "expected_servers": ["HackerNews", "Notion"],
+    "expected_tools": ["search_hackernews_posts", "get_hacker_news_item", "notion_create_pages"],
+    "success_criteria": "Notion page created with HN post summary",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["MCP on HN"]}
+  },
+  {
+    "id": "R2H9",
+    "difficulty": "medium",
+    "query": "Get the HN user profile for 'pg', search GitHub for repositories owned by 'paulgraham', and write a combined profile to pg_profile.txt with their HN karma and GitHub repos.",
+    "expected_servers": ["HackerNews", "Github", "FileSystem"],
+    "expected_tools": ["get_hacker_news_user", "search_repositories", "write_file"],
+    "success_criteria": "File with combined HN + GitHub profile",
+    "side_effects": {"files": ["pg_profile.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2H10",
+    "difficulty": "medium",
+    "query": "Search the web for 'Linear project management API', take the top 3 results, and store them alongside all Linear team names in a SQLite table called 'linear_research' with columns: type TEXT ('web' or 'team'), name TEXT, url TEXT.",
+    "expected_servers": ["Tavily", "Linear", "SqLite"],
+    "expected_tools": ["tavily_search", "get_teams", "query"],
+    "success_criteria": "SQLite table with web results and team names",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["linear_research"]}
+  },
+  {
+    "id": "R2H11",
+    "difficulty": "medium",
+    "query": "Get the latest 3 HN job postings, then search Apollo for organizations matching each company name mentioned. Write a report to hn_jobs_apollo.txt mapping each job to the Apollo org data found (or 'not found').",
+    "expected_servers": ["HackerNews", "Apollo", "FileSystem"],
+    "expected_tools": ["get_job_story_ids", "get_hacker_news_item", "search_organizations_in_apollo", "write_file"],
+    "success_criteria": "File mapping HN jobs to Apollo org data",
+    "side_effects": {"files": ["hn_jobs_apollo.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R2H12",
+    "difficulty": "medium",
+    "query": "Create a Google Spreadsheet titled 'Linear Project Tracker', add headers (Project Name, Project ID, Team), then populate it with all projects from our Linear workspace.",
+    "expected_servers": ["GoogleSheets", "Linear"],
+    "expected_tools": ["create_a_google_sheet", "list_linear_projects", "batch_update_spreadsheet"],
+    "success_criteria": "Spreadsheet created and populated with Linear project data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["Linear Project Tracker"]}
+  },
+  {
+    "id": "R2H13",
+    "difficulty": "medium",
+    "query": "Search Notion for pages containing 'project', then get the file listing from the current directory, and write a combined inventory to inventory.txt listing both Notion pages and local files.",
+    "expected_servers": ["Notion", "FileSystem"],
+    "expected_tools": ["notion_search", "list_directory", "write_file"],
+    "success_criteria": "File with combined Notion + filesystem inventory",
+    "side_effects": {"files": ["inventory.txt"], "directories": [], "sqlite_tables": []}
+  }
+]

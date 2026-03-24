@@ -1,0 +1,578 @@
+[
+  {
+    "id": "S1",
+    "difficulty": "simple",
+    "query": "List all files and directories in the current directory",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["list_directory"],
+    "success_criteria": "Response lists context.md and test_mcp.py",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S2",
+    "difficulty": "simple",
+    "query": "Read the contents of context.md and give me a brief summary of what it contains",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["read_file", "read_text_file"],
+    "success_criteria": "Response mentions MCP, benchmarking, Code Mode",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S3",
+    "difficulty": "simple",
+    "query": "Create a new file called notes.txt in the current directory with the content 'Benchmark run started'",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["write_file"],
+    "success_criteria": "File notes.txt created with exact content",
+    "side_effects": { "files": ["notes.txt"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S4",
+    "difficulty": "simple",
+    "query": "What is the file size and last modified date of context.md?",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["get_file_info"],
+    "success_criteria": "Response contains numeric file size and a date",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S5",
+    "difficulty": "simple",
+    "query": "Find all Python (.py) files in this directory and its subdirectories",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["search_files"],
+    "success_criteria": "Finds test_mcp.py, dump_tools.py, benchmark.py",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S6",
+    "difficulty": "simple",
+    "query": "Create a SQLite table called 'products' with columns: id (integer primary key), name (text), price (real), category (text). Then insert these 3 rows: ('Laptop', 999.99, 'Electronics'), ('Coffee Mug', 12.50, 'Kitchen'), ('Python Book', 45.00, 'Books')",
+    "expected_servers": ["SQLite"],
+    "expected_tools": ["query", "create_record"],
+    "success_criteria": "Table created with 3 rows",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["products"] }
+  },
+  {
+    "id": "S7",
+    "difficulty": "simple",
+    "query": "Show me all tables in the database and their column schemas",
+    "expected_servers": ["SQLite"],
+    "expected_tools": ["list_tables", "get_table_schema"],
+    "success_criteria": "Lists table names and column definitions",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S8",
+    "difficulty": "simple",
+    "query": "Get information about the SQLite database — does it exist, what is its size, and how many tables does it have?",
+    "expected_servers": ["SQLite"],
+    "expected_tools": ["db_info"],
+    "success_criteria": "Returns database metadata",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S9",
+    "difficulty": "simple",
+    "query": "Search the web for 'Model Context Protocol MCP vs A2A', and tell the core difference to me.",
+    "expected_servers": ["Tavily"],
+    "expected_tools": ["tavily_search"],
+    "success_criteria": "Returns relevant results about MCP",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S10",
+    "difficulty": "simple",
+    "query": "Extract the main content from the URL https://blog.samaltman.com/the-gentle-singularity and give me a brief summary.",
+    "expected_servers": ["Tavily"],
+    "expected_tools": ["tavily_extract"],
+    "success_criteria": "Returns actual page content about MCP",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S11",
+    "difficulty": "simple",
+    "query": "Search the web for 'Starlark programming language by Google' and give me a brief overview of what it is, its relationship to Bazel, and how it differs from Python.",
+    "expected_servers": ["Tavily"],
+    "expected_tools": ["tavily_research"],
+    "success_criteria": "Mentions Bazel, Python subset, Google",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S12",
+    "difficulty": "simple",
+    "query": "Scrape the content from https://httpbin.org/html and tell me what the page contains",
+    "expected_servers": ["Firecrawl"],
+    "expected_tools": ["firecrawl_scrape"],
+    "success_criteria": "Returns page content from httpbin HTML endpoint",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S13",
+    "difficulty": "simple",
+    "query": "Map all URLs on the website https://modelcontextprotocol.io",
+    "expected_servers": ["Firecrawl"],
+    "expected_tools": ["firecrawl_map"],
+    "success_criteria": "Returns list of URLs from the site",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S14",
+    "difficulty": "simple",
+    "query": "Search the web for 'AI gateway middleware comparison' and extract content from the results",
+    "expected_servers": ["Firecrawl"],
+    "expected_tools": ["firecrawl_search"],
+    "success_criteria": "Returns search results with extracted content",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S18",
+    "difficulty": "simple",
+    "query": "Get the description, star count, and primary language of the repository maximhq/bifrost on GitHub",
+    "expected_servers": ["GitHub"],
+    "expected_tools": ["search_repositories", "get_file_contents"],
+    "success_criteria": "Returns repo description and star count",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S19",
+    "difficulty": "simple",
+    "query": "Search GitHub for repositories related to 'FileSystem MCP servers' with more than 50 stars",
+    "expected_servers": ["GitHub"],
+    "expected_tools": ["search_repositories"],
+    "success_criteria": "Returns list of repos with star counts",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "S20",
+    "difficulty": "simple",
+    "query": "Get the authenticated GitHub user's profile information",
+    "expected_servers": ["GitHub"],
+    "expected_tools": ["get_me"],
+    "success_criteria": "Returns username, bio, or profile data",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M1",
+    "difficulty": "medium",
+    "query": "Create a directory called 'reports' in the current directory, then create a file 'reports/daily.txt' with the text 'Daily report — no issues found', then list the contents of the reports directory to confirm the file is there",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["create_directory", "write_file", "list_directory"],
+    "success_criteria": "Directory created, file written, listing confirms file",
+    "side_effects": { "files": ["reports/daily.txt"], "directories": ["reports"], "sqlite_tables": [] }
+  },
+  {
+    "id": "M2",
+    "difficulty": "medium",
+    "query": "Create a SQLite table 'sales' with columns: id (integer primary key), product (text), quantity (integer), unit_price (real), sale_date (text). Insert 10 sample sales records for 3 different products across different dates. Then run three queries: total revenue per product, best-selling product by quantity, and the average order value",
+    "expected_servers": ["SQLite"],
+    "expected_tools": ["query"],
+    "success_criteria": "Table created, 10 rows inserted, 3 aggregate queries return correct results",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["sales"] }
+  },
+  {
+    "id": "M4",
+    "difficulty": "medium",
+    "query": "List the 5 most recent open issues in the maximhq/bifrost repository on GitHub, and for the most recent one, show its full details including any comments",
+    "expected_servers": ["GitHub"],
+    "expected_tools": ["list_issues", "issue_read"],
+    "success_criteria": "Lists 5 issues then shows details of the latest one",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M5",
+    "difficulty": "medium",
+    "query": "Search the web for 'Bifrost AI gateway features', then crawl the most relevant result URL to get more detailed content about its features",
+    "expected_servers": ["Tavily"],
+    "expected_tools": ["tavily_search", "tavily_crawl"],
+    "success_criteria": "Search results followed by deeper crawl content",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M6",
+    "difficulty": "medium",
+    "query": "Scrape both https://httpbin.org/html and https://blog.samaltman.com using Firecrawl, then compare the two pages in terms of content structure and purpose",
+    "expected_servers": ["Firecrawl"],
+    "expected_tools": ["firecrawl_scrape"],
+    "success_criteria": "Both pages scraped and compared",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M7",
+    "difficulty": "medium",
+    "query": "Read all .py files in the current directory and create a code overview document called code_summary.txt that describes what each Python file does",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["search_files", "read_multiple_files", "read_text_file", "write_file"],
+    "success_criteria": "Reads all .py files, writes summary to code_summary.txt",
+    "side_effects": { "files": ["code_summary.txt"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M8",
+    "difficulty": "medium",
+    "query": "Search the web for 'top Python web frameworks 2026' and save the results as a formatted markdown file called frameworks.md",
+    "expected_servers": ["Tavily", "FileSystem"],
+    "expected_tools": ["tavily_search", "write_file"],
+    "success_criteria": "Search results saved to frameworks.md",
+    "side_effects": { "files": ["frameworks.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M9",
+    "difficulty": "medium",
+    "query": "Scrape the content from https://httpbin.org/html and save the extracted text to a file called scraped_data.txt",
+    "expected_servers": ["Firecrawl", "FileSystem"],
+    "expected_tools": ["firecrawl_scrape", "write_file"],
+    "success_criteria": "Page content saved to file",
+    "side_effects": { "files": ["scraped_data.txt"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M10",
+    "difficulty": "medium",
+    "query": "Search the web for 'LLM benchmarking best practices' and store each result with its title, URL, and snippet in a SQLite table called 'search_results'",
+    "expected_servers": ["Tavily", "SQLite"],
+    "expected_tools": ["tavily_search", "query"],
+    "success_criteria": "Table created and populated with search results",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["search_results"] }
+  },
+  {
+    "id": "M11",
+    "difficulty": "medium",
+    "query": "Get the README.md content from the anthropics/anthropic-cookbook GitHub repository and save it to a local file called cookbook_readme.md",
+    "expected_servers": ["GitHub", "FileSystem"],
+    "expected_tools": ["get_file_contents", "write_file"],
+    "success_criteria": "README content saved to local file",
+    "side_effects": { "files": ["cookbook_readme.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M13",
+    "difficulty": "medium",
+    "query": "List all files in the current directory with their sizes, then create a SQLite table called 'file_catalog' and insert each file with its name, size in bytes, and file extension",
+    "expected_servers": ["FileSystem", "SQLite"],
+    "expected_tools": ["list_directory_with_sizes", "get_file_info", "query"],
+    "success_criteria": "SQLite table has entries for all files in directory",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["file_catalog"] }
+  },
+  {
+    "id": "M14",
+    "difficulty": "medium",
+    "query": "Search GitHub for the top 5 repositories about 'model context protocol', then use web search to find the documentation URL for each one",
+    "expected_servers": ["GitHub", "Tavily"],
+    "expected_tools": ["search_repositories", "tavily_search"],
+    "success_criteria": "5 repos listed with documentation URLs",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M15",
+    "difficulty": "medium",
+    "query": "Scrape https://httpbin.org/json and store the extracted JSON fields in a SQLite table with columns matching the JSON structure",
+    "expected_servers": ["Firecrawl", "SQLite"],
+    "expected_tools": ["firecrawl_scrape", "query"],
+    "success_criteria": "SQLite table created with schema matching JSON",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["httpbin_data"] }
+  },
+  {
+    "id": "M16",
+    "difficulty": "medium",
+    "query": "Get the 10 most recent open issues from modelcontextprotocol/specification on GitHub and store them in a SQLite table with columns: number, title, author, created_date, labels",
+    "expected_servers": ["GitHub", "SQLite"],
+    "expected_tools": ["list_issues", "query"],
+    "success_criteria": "Table with 10 issue records",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["github_issues"] }
+  },
+  {
+    "id": "M17",
+    "difficulty": "medium",
+    "query": "Read the file context.md from the current directory, identify all the key technologies mentioned in it, and search the web for a one-paragraph description of each technology",
+    "expected_servers": ["FileSystem", "Tavily"],
+    "expected_tools": ["read_file", "tavily_search"],
+    "success_criteria": "Technologies identified from file with web descriptions",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M18",
+    "difficulty": "medium",
+    "query": "Search the web for 'Starlark vs Python differences' and create a markdown comparison table saved to a file called starlark_vs_python.md",
+    "expected_servers": ["Tavily", "FileSystem"],
+    "expected_tools": ["tavily_search", "write_file"],
+    "success_criteria": "File contains a structured comparison table",
+    "side_effects": { "files": ["starlark_vs_python.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M19",
+    "difficulty": "medium",
+    "query": "Search GitHub for repositories about 'AI gateway' sorted by stars, then search the web for the latest news about the top 3 results",
+    "expected_servers": ["GitHub", "Tavily"],
+    "expected_tools": ["search_repositories", "tavily_search"],
+    "success_criteria": "3 repos with recent news about each",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M20",
+    "difficulty": "medium",
+    "query": "Extract content from these 3 URLs using web extraction: https://httpbin.org/html, https://blog.samaltman.com, https://nordicapis.com/how-code-mode-builds-on-mcp-for-agent-tooling — then save a combined summary of all three to extracted_summary.md",
+    "expected_servers": ["Tavily", "FileSystem"],
+    "expected_tools": ["tavily_extract", "write_file"],
+    "success_criteria": "File contains summaries of all 3 pages",
+    "side_effects": { "files": ["extracted_summary.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "M22",
+    "difficulty": "medium",
+    "query": "Create a SQLite table 'bookmarks' with columns: url (text), title (text), description (text), added_date (text). Insert 5 AI-related URLs as bookmarks. Then use web extraction to get the actual page title for each URL and update the bookmark records with the real titles",
+    "expected_servers": ["SQLite", "Tavily"],
+    "expected_tools": ["query", "create_record", "tavily_extract", "update_records"],
+    "success_criteria": "Table created, populated, enriched with real titles",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["bookmarks"] }
+  },
+  {
+    "id": "H1",
+    "difficulty": "hard",
+    "query": "Research the top 5 AI API gateway tools (like Bifrost, LiteLLM, Portkey, etc.) using web search, then use Firecrawl to scrape each tool's homepage and extract only the key features list (not the full page). Compare their features and save a brief markdown comparison report (under 200 words) to ai_gateways_comparison.md",
+    "expected_servers": ["Tavily", "Firecrawl", "FileSystem"],
+    "expected_tools": ["tavily_search", "firecrawl_scrape", "write_file"],
+    "success_criteria": "File contains detailed feature comparison of 5+ gateways",
+    "side_effects": { "files": ["ai_gateways_comparison.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "H2",
+    "difficulty": "hard",
+    "query": "Search GitHub for the top 5 ai observability platform repositories, get each repo's README content, store all the data in a SQLite table with columns (repo_name, description, stars, readme_content), and then export a summary report to mcp_repos_report.txt",
+    "expected_servers": ["GitHub", "SQLite", "FileSystem"],
+    "expected_tools": ["search_repositories", "get_file_contents", "query", "write_file"],
+    "success_criteria": "SQLite table + summary file with 5 repos",
+    "side_effects": { "files": ["mcp_repos_report.txt"], "directories": [], "sqlite_tables": ["mcp_repos"] }
+  },
+  {
+    "id": "H3",
+    "difficulty": "hard",
+    "query": "Find articles about 'AI agent frameworks' using web search, then use Firecrawl to extract only the main article text (not sidebars or navigation) from the top 3 URLs. Store each article's title, url, and a 200-word summary in a SQLite table, then query the stored data to identify common themes and save a brief analysis (under 200 words) to agent_frameworks.md",
+    "expected_servers": ["Tavily", "Firecrawl", "SQLite", "FileSystem"],
+    "expected_tools": ["tavily_search", "firecrawl_scrape", "query", "write_file"],
+    "success_criteria": "4-server pipeline: search → scrape → store → analyze → write",
+    "side_effects": { "files": ["agent_frameworks.md"], "directories": [], "sqlite_tables": ["agent_articles"] }
+  },
+  {
+    "id": "H5",
+    "difficulty": "hard",
+    "query": "Search GitHub for 'AI Gateway' repositories, get the open issues from the top 3 repos, search the web for related discussions about each issue topic, and store all findings in a SQLite database with three tables: repos (name, url, stars), issues (repo, title, body, author), and web_discussions (issue_title, discussion_url, summary)",
+    "expected_servers": ["GitHub", "Tavily", "SQLite"],
+    "expected_tools": ["search_repositories", "list_issues", "tavily_search", "query"],
+    "success_criteria": "3 SQLite tables populated with structured data",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": ["repos", "issues", "web_discussions"] }
+  },
+  {
+    "id": "H6",
+    "difficulty": "hard",
+    "query": "Use Firecrawl to scrape https://openai.com/api/pricing and https://anthropic.com/pricing — extract only the model names and per-token prices (not the full page). Store the pricing data in a SQLite table with columns (provider, model_name, input_price_per_mtok, output_price_per_mtok), and generate a comparison markdown file saved as llm_pricing.md",
+    "expected_servers": ["Firecrawl", "SQLite", "FileSystem"],
+    "expected_tools": ["firecrawl_scrape", "query", "write_file"],
+    "success_criteria": "Pricing data stored in SQLite + comparison file generated",
+    "side_effects": { "files": ["llm_pricing.md"], "directories": [], "sqlite_tables": ["llm_pricing"] }
+  },
+  {
+    "id": "H7",
+    "difficulty": "hard",
+    "query": "Build a project tracker: create a SQLite table called 'ai_projects' with columns (name, github_url, stars, description, latest_news, last_updated), search GitHub for the top 10 trending AI repositories, enrich each entry by searching the web for recent news about each project, store everything in the database, and export the complete dataset to a JSON file called ai_projects.json",
+    "expected_servers": ["GitHub", "Tavily", "SQLite", "FileSystem"],
+    "expected_tools": ["search_repositories", "tavily_search", "query", "create_record", "write_file"],
+    "success_criteria": "SQLite table with 10 enriched rows + JSON export",
+    "side_effects": { "files": ["ai_projects.json"], "directories": [], "sqlite_tables": ["ai_projects"] }
+  },
+  {
+    "id": "H8",
+    "difficulty": "hard",
+    "query": "Research 'LLM evaluation frameworks' using web search, find the top 5 open source options on GitHub, use Firecrawl to scrape only the Getting Started or introduction section of each tool's documentation (not the entire site). Create a SQLite table comparing them with columns (name, github_url, stars, key_features, doc_quality_notes), and generate a brief recommendation report (under 200 words) saved as eval_frameworks_guide.md",
+    "expected_servers": ["Tavily", "GitHub", "Firecrawl", "SQLite", "FileSystem"],
+    "expected_tools": ["tavily_search", "search_repositories", "firecrawl_scrape", "query", "write_file"],
+    "success_criteria": "All 5 servers used in pipeline",
+    "side_effects": { "files": ["eval_frameworks_guide.md"], "directories": [], "sqlite_tables": ["eval_frameworks"] }
+  },
+  {
+    "id": "H10",
+    "difficulty": "hard",
+    "query": "Search for 'MCP Model Context Protocol specification' on the web, then use Firecrawl to map the URLs on modelcontextprotocol.io and scrape only the first 3 documentation pages (not the entire site). Store each section in a SQLite table with columns (section_title, content, url), and create an index file called mcp_docs_index.md listing all sections with short descriptions",
+    "expected_servers": ["Tavily", "Firecrawl", "SQLite", "FileSystem"],
+    "expected_tools": ["tavily_search", "firecrawl_map", "firecrawl_scrape", "query", "write_file"],
+    "success_criteria": "SQLite table with doc sections + index file",
+    "side_effects": { "files": ["mcp_docs_index.md"], "directories": [], "sqlite_tables": ["mcp_docs"] }
+  },
+  {
+    "id": "H11",
+    "difficulty": "hard",
+    "query": "Find all open pull requests in the maximhq/bifrost repository on GitHub, for each PR search the web for any related discussions or blog posts about its topic, and compile a concise PR status report (under 300 words) saved to pr_status_report.md",
+    "expected_servers": ["GitHub", "Tavily", "FileSystem"],
+    "expected_tools": ["list_pull_requests", "tavily_search", "write_file"],
+    "success_criteria": "PR list with related web discussions per PR",
+    "side_effects": { "files": ["pr_status_report.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "H12",
+    "difficulty": "hard",
+    "query": "Create a competitive analysis: search the web for 'API gateway for LLMs', find each mentioned tool's GitHub repository, get their star counts and latest release info. Use Firecrawl to scrape only the hero section and feature list from each tool's homepage (not full page content). Store everything in SQLite with two tables (tools: name/url/stars/latest_release, features: tool_name/feature/description), and generate a brief ranked comparison report (under 200 words) saved to gateway_analysis.md",
+    "expected_servers": ["Tavily", "GitHub", "Firecrawl", "SQLite", "FileSystem"],
+    "expected_tools": ["tavily_search", "search_repositories", "get_latest_release", "firecrawl_scrape", "query", "write_file"],
+    "success_criteria": "All 5 servers, multi-table SQLite, ranked report",
+    "side_effects": { "files": ["gateway_analysis.md"], "directories": [], "sqlite_tables": ["tools", "features"] }
+  },
+  {
+    "id": "H13",
+    "difficulty": "hard",
+    "query": "Get the 10 most recent issues from langchain-ai/langchain on GitHub, categorize them by their labels, search the web for potential solutions for the 3 most recent ones, store issue-solution pairs in a SQLite table (issue_number, title, labels, solution_summary, solution_url), and export everything to langchain_issues.json",
+    "expected_servers": ["GitHub", "Tavily", "SQLite", "FileSystem"],
+    "expected_tools": ["list_issues", "tavily_search", "query", "write_file"],
+    "success_criteria": "Issues categorized, solutions found, stored + exported as JSON",
+    "side_effects": { "files": ["langchain_issues.json"], "directories": [], "sqlite_tables": ["langchain_issues"] }
+  },
+  {
+    "id": "H15",
+    "difficulty": "hard",
+    "query": "Build a knowledge base about MCP servers: search GitHub for repositories matching 'mcp-server', get the README and the latest 3 commits for the top 3 repos. Store everything in normalized SQLite tables (repositories: name/url/stars/description, commits: repo_name/sha/message/date), and generate a concise summary report mcp_kb.md (under 300 words) and a JSON data export mcp_kb.json",
+    "expected_servers": ["GitHub", "Firecrawl", "SQLite", "FileSystem"],
+    "expected_tools": ["search_repositories", "get_file_contents", "list_commits", "firecrawl_scrape", "query", "write_file"],
+    "success_criteria": "3 normalized SQLite tables + 2 output files — most complex orchestration",
+    "side_effects": { "files": ["mcp_kb.md", "mcp_kb.json"], "directories": [], "sqlite_tables": ["repositories", "commits", "documentation"] }
+  },
+  {
+    "id": "E1",
+    "difficulty": "edge",
+    "query": "Search for 'latest AI and robotics news in particular'",
+    "expected_servers": ["Tavily", "Firecrawl"],
+    "expected_tools": ["tavily_search", "firecrawl_search", "tavily_research"],
+    "success_criteria": "Model picks an appropriate search tool without explicit guidance",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "E2",
+    "difficulty": "edge",
+    "query": "Read the file called nonexistent_file_12345.txt from the current directory and tell me what happened",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["read_file", "read_text_file"],
+    "success_criteria": "Gracefully reports file not found, does not crash",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "E3",
+    "difficulty": "edge",
+    "query": "Create a SQLite table 'employees' with columns: id (integer primary key), name (text), department (text), salary (real), hire_date (text). Generate and insert 50 realistic employee records across 5 departments (Engineering, Marketing, Sales, HR, Finance) with varied salaries. Then run these 5 analytical queries: (1) total headcount by department, (2) average salary by department, (3) the single highest-paid employee, (4) salary percentiles (25th, 50th, 75th), (5) departments where the average salary is above the company-wide average. Save all query results to analytics.txt",
+    "expected_servers": ["SQLite", "FileSystem"],
+    "expected_tools": ["query", "write_file"],
+    "success_criteria": "50 rows inserted, 5 complex queries executed, results saved",
+    "side_effects": { "files": ["analytics.txt"], "directories": [], "sqlite_tables": ["employees"] }
+  },
+  {
+    "id": "E4",
+    "difficulty": "edge",
+    "query": "In a single request, search for three different topics: 'AI safety best practices', 'quantum computing applications in 2026', and 'renewable energy innovations'. Combine all three sets of results into one structured report with sections for each topic (under 300 words total), saved to multi_topic_research.md",
+    "expected_servers": ["Tavily", "FileSystem"],
+    "expected_tools": ["tavily_search", "write_file"],
+    "success_criteria": "Three separate searches combined into one structured report",
+    "side_effects": { "files": ["multi_topic_research.md"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "E5",
+    "difficulty": "edge",
+    "query": "Create a file called verify_test.txt with the content 'version 1'. Then read it back to confirm the content is correct. Then edit the file to change it to 'version 2'. Then read it again to verify the edit worked. Report what you observed at each step",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["write_file", "read_file", "edit_file"],
+    "success_criteria": "4-step sequential chain: write → read → edit → read, each verified",
+    "side_effects": { "files": ["verify_test.txt"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "E6",
+    "difficulty": "edge",
+    "query": "Search GitHub for repositories matching 'mcp' AND separately search the web for 'MCP model context protocol'. Compare the findings from both sources, remove any duplicates, and save only the unique combined results to mcp_combined.txt",
+    "expected_servers": ["GitHub", "Tavily", "FileSystem"],
+    "expected_tools": ["search_repositories", "tavily_search", "write_file"],
+    "success_criteria": "Two sources queried, results deduplicated, saved",
+    "side_effects": { "files": ["mcp_combined.txt"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "E8",
+    "difficulty": "edge",
+    "query": "Map the website https://modelcontextprotocol.io to find all URLs, then scrape only the first 3 URLs found using Firecrawl (extract just the main content, not navigation or footers), and save each page's content as a separate file: page1.txt, page2.txt, page3.txt",
+    "expected_servers": ["Firecrawl", "FileSystem"],
+    "expected_tools": ["firecrawl_map", "firecrawl_scrape", "write_file"],
+    "success_criteria": "Dynamic iteration: map output drives scrape inputs, 3 files created",
+    "side_effects": { "files": ["page1.txt", "page2.txt", "page3.txt"], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "NT1",
+    "difficulty": "simple",
+    "query": "Create a new page in my Notion workspace titled 'Benchmark Test Page' with the following content: a heading 'Overview' followed by a paragraph saying 'This page was created by an automated benchmark test.' Then search Notion to confirm the page exists.",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion-create-pages", "notion-search"],
+    "success_criteria": "Page created in Notion and found via search",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["Benchmark Test Page"] }
+  },
+  {
+    "id": "NT2",
+    "difficulty": "simple",
+    "query": "List all users in my Notion workspace and show their names and roles. Also list all teams (teamspaces) in the workspace.",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion-get-users", "notion-get-teams"],
+    "success_criteria": "Returns user list with names/roles and team list",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [] }
+  },
+  {
+    "id": "NT3",
+    "difficulty": "simple",
+    "query": "Create a Notion database called 'Reading List' with columns: Title (title), Author (rich_text), Status (select with options: To Read, Reading, Finished), and Rating (number). Then add 3 books to it: 'Designing Data-Intensive Applications' by Martin Kleppmann (Finished, rating 5), 'The Pragmatic Programmer' by Andy Hunt (Reading, rating 4), 'Clean Code' by Robert Martin (To Read, no rating).",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion-create-database", "notion-create-pages"],
+    "success_criteria": "Database created with correct schema and 3 book entries",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_databases": ["Reading List"] }
+  },
+  {
+    "id": "NT4",
+    "difficulty": "medium",
+    "query": "Search the web for 'top AI startups to watch in 2026', then create a Notion page titled 'AI Startups Report' with a structured summary — use headings for each startup, include a brief description and why it's notable. Search Notion afterward to confirm the page was created.",
+    "expected_servers": ["Tavily", "Notion"],
+    "expected_tools": ["tavily_search", "notion-create-pages", "notion-search"],
+    "success_criteria": "Web search results summarized into a structured Notion page",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["AI Startups Report"] }
+  },
+  {
+    "id": "NT5",
+    "difficulty": "medium",
+    "query": "Create a Notion database called 'Sprint Tasks' with columns: Task (title), Status (select: Backlog, In Progress, Review, Done), Priority (select: P0, P1, P2), Assignee (rich_text), and Due Date (date). Add 5 sample tasks with varied statuses and priorities. Then create a board view called 'Task Board' grouped by Status.",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion-create-database", "notion-create-pages", "notion-fetch", "notion-create-view"],
+    "success_criteria": "Database with 5 rows + board view created",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_databases": ["Sprint Tasks"] }
+  },
+  {
+    "id": "NT6",
+    "difficulty": "medium",
+    "query": "Read the file context.md from the current directory, extract the key topics and structure from it, and create a Notion page titled 'Project Context Summary' that presents the information in a well-organized format with headings and bullet points.",
+    "expected_servers": ["FileSystem", "Notion"],
+    "expected_tools": ["read_file", "notion-create-pages"],
+    "success_criteria": "File content read and summarized into a Notion page",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["Project Context Summary"] }
+  },
+  {
+    "id": "NT7",
+    "difficulty": "hard",
+    "query": "Search GitHub for the top 5 repositories about 'MCP server', then create a Notion database called 'MCP Repos Tracker' with columns: Name (title), URL (url), Stars (number), Language (select), Description (rich_text), and Last Updated (date). Add each repository as a row. Then fetch the database to get its ID and create a board view grouped by Language.",
+    "expected_servers": ["GitHub", "Notion"],
+    "expected_tools": ["search_repositories", "notion-create-database", "notion-create-pages", "notion-fetch", "notion-create-view"],
+    "success_criteria": "GitHub data populated into Notion database with board view",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_databases": ["MCP Repos Tracker"] }
+  },
+  {
+    "id": "NT8",
+    "difficulty": "hard",
+    "query": "Research 'LLM API pricing comparison' using web search, then create a Notion database called 'LLM Pricing' with columns: Provider (title), Model (rich_text), Input Price per 1M tokens (number), Output Price per 1M tokens (number), and Notes (rich_text). Populate it with pricing data for at least 5 models from different providers. Also save the same data as a local file called notion_pricing_export.txt.",
+    "expected_servers": ["Tavily", "Notion", "FileSystem"],
+    "expected_tools": ["tavily_search", "notion-create-database", "notion-create-pages", "write_file"],
+    "success_criteria": "Web research → Notion database + local file export",
+    "side_effects": { "files": ["notion_pricing_export.txt"], "directories": [], "sqlite_tables": [], "notion_databases": ["LLM Pricing"] }
+  },
+  {
+    "id": "NT9",
+    "difficulty": "edge",
+    "query": "Create a Notion page titled 'Update Test Page' with the content 'Initial version of this page.' Then fetch the page to confirm its content. Next, update the page content to 'Updated version — this content was modified.' Then add a comment to the page saying 'This page has been updated successfully.' Finally, fetch the page one more time and get its comments to verify both the updated content and the comment are present.",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion-create-pages", "notion-fetch", "notion-update-page", "notion-create-comment", "notion-get-comments"],
+    "success_criteria": "Full CRUD cycle: create → fetch → update → comment → verify",
+    "side_effects": { "files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["Update Test Page"] }
+  }
+]

@@ -3,5 +3,7 @@ __pycache__
 myenv
 .env
 *.json
+!mcp-code-mode-benchmark/**/*.json
+mcp-code-mode-benchmark/runs/
 test*
 10mbprompt.txt

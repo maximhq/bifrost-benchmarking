@@ -1,0 +1,2542 @@
+[
+  {
+    "tool_name": "read_file",
+    "description": "Read the complete contents of a file as text (deprecated; use read_text_file instead).",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "read_multiple_files",
+    "description": "Read the contents of multiple files simultaneously, returning each file's content keyed by its path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "write_file",
+    "description": "Create a new file or completely overwrite an existing file with new text content.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "edit_file",
+    "description": "Make line-based edits to a text file, returning a git-style diff of the changes made.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "create_directory",
+    "description": "Create a new directory (including nested directories) or silently succeed if it already exists.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "directory_tree",
+    "description": "Get a recursive JSON tree view of all files and directories under a given path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "move_file",
+    "description": "Move or rename a file or directory from a source path to a destination path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "list_allowed_directories",
+    "description": "Return the list of directories (and their subdirectories) that this server is permitted to access.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "read_text_file",
+    "description": "Read the complete text contents of a single file, with optional head/tail line limiting.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "read_media_file",
+    "description": "Read an image or audio file and return its base64-encoded data along with its MIME type.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "list_directory",
+    "description": "Get a detailed listing of all files and directories at a given path, prefixed with [FILE] or [DIR].",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "list_directory_with_sizes",
+    "description": "Get a detailed listing of all files and directories at a given path, including their sizes.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "search_files",
+    "description": "Recursively search for files and directories matching a glob-style pattern under a given path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "get_file_info",
+    "description": "Retrieve detailed metadata (size, type, timestamps, permissions) about a file or directory.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "firecrawl_agent_status",
+    "description": "Check the status of an agent job and retrieve results when complete.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_browser_create",
+    "description": "Create a browser session for code execution via CDP (Chrome DevTools Protocol).",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_browser_delete",
+    "description": "Destroy a browser session.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_map",
+    "description": "Map a website to discover all indexed URLs on the site.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_crawl",
+    "description": "Starts a crawl job on a website and extracts content from all pages.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_browser_list",
+    "description": "List browser sessions, optionally filtered by status.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_scrape",
+    "description": "Scrape content from a single URL with advanced options.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_search",
+    "description": "Search the web and optionally extract content from search results.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_check_crawl_status",
+    "description": "Check the status of a crawl job.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_extract",
+    "description": "Extract structured information from web pages using LLM capabilities.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_agent",
+    "description": "Autonomous web research agent.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "list_commits",
+    "description": "Get list of commits of a branch in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_issues",
+    "description": "List issues in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_pull_request",
+    "description": "Create a new pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "update_pull_request",
+    "description": "Update an existing pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "add_reply_to_pull_request_comment",
+    "description": "Add a reply to an existing pull request comment.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "delete_file",
+    "description": "Delete a file from a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_me",
+    "description": "Get details of the authenticated GitHub user.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_release_by_tag",
+    "description": "Get a specific release by its tag name in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_tag",
+    "description": "Get details about a specific git tag in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "request_copilot_review",
+    "description": "Request a GitHub Copilot code review for a pull request.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "run_secret_scanning",
+    "description": "Scan files, content, or recent changes for secrets such as API keys, passwords, etc.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_pull_requests",
+    "description": "Search for pull requests in GitHub repositories using issues search syntax.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "add_comment_to_pending_review",
+    "description": "Add a review comment to the requester's latest pending pull request review.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "fork_repository",
+    "description": "Fork a GitHub repository to your account or specified organization.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_commit",
+    "description": "Get details for a commit from a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_latest_release",
+    "description": "Get the latest release in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "pull_request_read",
+    "description": "Get information on a specific pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_issues",
+    "description": "Search for issues in GitHub repositories using issues search syntax.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_repositories",
+    "description": "Find GitHub repositories by name, description, readme, topics, or other metadata.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "update_pull_request_branch",
+    "description": "Update the branch of a pull request with the latest changes from the base branch.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "issue_write",
+    "description": "Create a new or update an existing issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_issue_types",
+    "description": "List supported issue types for a repository owner (organization).",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_pull_requests",
+    "description": "List pull requests in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "merge_pull_request",
+    "description": "Merge a pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "pull_request_review_write",
+    "description": "Create and/or submit or delete a review of a pull request.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "push_files",
+    "description": "Push multiple files to a GitHub repository in a single commit.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "sub_issue_write",
+    "description": "Add a sub-issue to a parent issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_or_update_file",
+    "description": "Create or update a single file in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_pull_request_with_copilot",
+    "description": "Delegate a task to GitHub Copilot coding agent to perform in the background.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_copilot_job_status",
+    "description": "Get the status of a GitHub Copilot coding agent job.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_file_contents",
+    "description": "Get the contents of a file or directory from a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_label",
+    "description": "Get a specific label from a repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_teams",
+    "description": "Get details of the teams the user is a member of.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_branches",
+    "description": "List branches in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "add_issue_comment",
+    "description": "Add a comment to a specific issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_repository",
+    "description": "Create a new GitHub repository in your account or specified organization.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "issue_read",
+    "description": "Get information about a specific issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_code",
+    "description": "Fast and precise code search across all GitHub repositories using GitHub's native search.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "assign_copilot_to_issue",
+    "description": "Assign Copilot to a specific issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_branch",
+    "description": "Create a new branch in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_team_members",
+    "description": "Get member usernames of a specific team in an organization.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_releases",
+    "description": "List releases in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_tags",
+    "description": "List git tags in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_users",
+    "description": "Find GitHub users by username, real name, or other profile information.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "browser_console_messages",
+    "description": "Returns all console messages from the browser.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_fill_form",
+    "description": "Fill multiple form fields at once.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_network_requests",
+    "description": "Returns all network requests made since loading the page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_select_option",
+    "description": "Select an option in a dropdown element.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_navigate",
+    "description": "Navigate the browser to a specified URL.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_navigate_back",
+    "description": "Go back to the previous page in the browser history.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_close",
+    "description": "Close the current browser page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_handle_dialog",
+    "description": "Accept or dismiss a browser dialog (alert/confirm/prompt).",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_press_key",
+    "description": "Press a key on the keyboard.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_snapshot",
+    "description": "Capture an accessibility snapshot of the current page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_tabs",
+    "description": "List, create, close, or select a browser tab.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_wait_for",
+    "description": "Wait for text to appear or disappear, or for a specified time to pass.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_take_screenshot",
+    "description": "Take a screenshot of the current page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_hover",
+    "description": "Hover the mouse over an element on the page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_run_code",
+    "description": "Run a Playwright code snippet directly.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_resize",
+    "description": "Resize the browser window to specified dimensions.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_evaluate",
+    "description": "Evaluate a JavaScript expression on the page or a specific element.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_file_upload",
+    "description": "Upload one or multiple files to the browser.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_install",
+    "description": "Install the browser specified in the configuration.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_type",
+    "description": "Type text into an editable element on the page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_click",
+    "description": "Perform a mouse click on an element on the web page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_drag",
+    "description": "Perform a drag-and-drop operation between two elements.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "db_info",
+    "description": "Get information about the SQLite database including path, existence, size, and table count.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "query",
+    "description": "Execute a raw SQL query against the database with optional parameter values.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "list_tables",
+    "description": "List all user tables in the SQLite database, excluding system tables.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "get_table_schema",
+    "description": "Get the schema information for a specific table including column details.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "create_record",
+    "description": "Insert a new record into a table with specified data.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "read_records",
+    "description": "Read records from a table with optional conditions, limit, and offset.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "update_records",
+    "description": "Update records in a table based on specified conditions.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "delete_records",
+    "description": "Delete records from a table based on specified conditions.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "tavily_research",
+    "description": "Perform comprehensive research on a given topic or question.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_search",
+    "description": "Search the web for current information on any topic.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_extract",
+    "description": "Extract content from URLs.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_crawl",
+    "description": "Crawl a website starting from a URL.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_map",
+    "description": "Map a website's structure.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "create_attachment",
+    "description": "Creates a new attachment and associates it with a specific, existing Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "add_reaction_to_comment",
+    "description": "Add a reaction to an existing Linear comment.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_comment",
+    "description": "Creates a new comment on a specified Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_linear_issue",
+    "description": "Creates a new issue in a specified Linear project and team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_issue_relation",
+    "description": "Create a relationship between two Linear issues (blocks, duplicate, related).",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_label",
+    "description": "Creates a new label in Linear for a specified team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_project",
+    "description": "Creates a new Linear project with specified name and team associations.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "delete_issue",
+    "description": "Archives an existing Linear issue by its ID.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "download_issue_attachments",
+    "description": "Downloads a specific attachment from a Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_current_user",
+    "description": "Gets the currently authenticated user's ID, name, email, and profile information.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_cycles_by_team_id",
+    "description": "Retrieves all cycles for a specified Linear team ID.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_create_issue_default_params",
+    "description": "Fetches a Linear team's default issue estimate and state.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_linear_issue",
+    "description": "Retrieves an existing Linear issue's comprehensive details.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_linear_project",
+    "description": "Retrieves a single Linear project by its unique identifier.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_issue_drafts",
+    "description": "List issue drafts for review or further editing.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_issues_by_team_id",
+    "description": "List all issues for a specific Linear team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_all_cycles",
+    "description": "Retrieves all cycles (sprint iterations) org-wide from Linear.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_issues",
+    "description": "Lists non-archived Linear issues with optional filters.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_labels",
+    "description": "Retrieves labels from Linear, optionally filtered by team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_projects",
+    "description": "Retrieves all projects from the Linear account.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_states",
+    "description": "Retrieves all workflow states for a specified team in Linear.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_teams",
+    "description": "Retrieves all teams with their members and projects.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_users",
+    "description": "Lists all workspace users with IDs, names, emails, and active status.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "remove_label_from_issue",
+    "description": "Removes a specified label from an existing Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "remove_reaction_from_comment",
+    "description": "Remove a reaction on a comment.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "run_query_or_mutation",
+    "description": "Execute any GraphQL query or mutation against Linear's API.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "search_linear_issues",
+    "description": "Search Linear issues using full-text search across identifier, title, and description.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "update_issue",
+    "description": "Updates an existing Linear issue using its issue_id.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "update_comment",
+    "description": "Update an existing Linear comment's body text.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "update_project",
+    "description": "Update an existing Linear project's properties.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "add_contacts_to_sequence",
+    "description": "Adds contacts to a specified Apollo email sequence.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_organization_enrichment",
+    "description": "Enriches data for up to 10 organizations simultaneously by domain.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_people_enrichment",
+    "description": "Enrich multiple person profiles simultaneously from Apollo's database.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_update_account_stage",
+    "description": "Bulk updates the stage for specified existing Apollo accounts.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_account",
+    "description": "Creates a new account in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_create_apollo_accounts",
+    "description": "Creates multiple accounts in Apollo.io with a single API call.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_create_apollo_contacts",
+    "description": "Bulk create multiple contacts in Apollo with a single API call.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_call_record",
+    "description": "Log call records in Apollo from external systems.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_contact",
+    "description": "Creates a new contact in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_custom_field",
+    "description": "Creates a new custom field in Apollo.io for contacts, accounts, or opportunities.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_deal",
+    "description": "Creates a new sales opportunity (deal) in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_task",
+    "description": "Create a single task in Apollo.io for a specific contact.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_account_by_id",
+    "description": "Retrieve detailed information about a specific account by its Apollo ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "check_api_key_status",
+    "description": "Check whether the provided Apollo API key is valid.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_apollo_contact",
+    "description": "Retrieves detailed information about a specific contact by its ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_apollo_deal",
+    "description": "Retrieves information about a specific deal by its ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_apollo_labels",
+    "description": "Retrieves all labels from Apollo.io for organizing contacts and accounts.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_opportunity_stages",
+    "description": "Retrieves all configured opportunity (deal) stages from Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_organization_by_id",
+    "description": "Retrieves complete information about a specific organization by its Apollo ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_organization_job_postings",
+    "description": "Retrieves paginated job postings for a specified organization.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_typed_custom_fields",
+    "description": "Retrieves all typed custom field definitions available in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_account_stages",
+    "description": "Retrieves the IDs for all available account stages in Apollo.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_contact_stages",
+    "description": "Retrieves all available contact stages from an Apollo account.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_apollo_deals",
+    "description": "Retrieves a list of deals from Apollo.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_email_accounts",
+    "description": "Retrieves all email accounts and their details for the authenticated user.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_fields",
+    "description": "Retrieves all field definitions from Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_apollo_users",
+    "description": "Retrieves a list of all users associated with the Apollo account.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "enrich_organization",
+    "description": "Fetches comprehensive organization enrichment data from Apollo.io for a domain.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_organizations",
+    "description": "Searches Apollo's database for organizations using various filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "enrich_person",
+    "description": "Enriches and retrieves information for a person from Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "people_search",
+    "description": "Searches Apollo's contact database for people using various filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_apollo_accounts",
+    "description": "Searches for accounts within your existing Apollo.io database.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_calls",
+    "description": "Searches for call records in Apollo.io using filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_apollo_contacts",
+    "description": "Searches Apollo contacts using keywords, stage IDs, or sorting.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_news_articles",
+    "description": "Search for news articles about companies in Apollo's database.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_outreach_emails",
+    "description": "Search for outreach emails sent through Apollo sequences.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_sequences",
+    "description": "Searches for sequences (automated email campaigns) in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_tasks",
+    "description": "Searches for tasks in Apollo.io using filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_apollo_account",
+    "description": "Updates specified attributes of an existing account in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_account_ownership",
+    "description": "Updates the ownership of multiple Apollo accounts to a specified user.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_call_record",
+    "description": "Update an existing call record in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_apollo_contact",
+    "description": "Update an existing contact's information in Apollo.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_contact_ownership",
+    "description": "Updates the ownership of specified Apollo contacts to a given user.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_update_apollo_contacts",
+    "description": "Bulk update multiple Apollo contacts with a single API call.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_contact_stage",
+    "description": "Updates the stage for one or more existing contacts in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_contact_status_in_sequence",
+    "description": "Updates a contact's status within a designated Apollo sequence.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_apollo_deal",
+    "description": "Updates specified fields of an existing Apollo.io deal.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "view_api_usage_stats",
+    "description": "Fetches Apollo API usage statistics and rate limits.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_ask_hn_story_ids",
+    "description": "Get up to 200 latest Ask HN story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_best_stories",
+    "description": "Get up to 500 best story IDs from HackerNews ranked by score.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_frontpage",
+    "description": "Retrieve current Hacker News frontpage posts filtered by minimum points.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_item",
+    "description": "Get a Hacker News item by its unique ID from the Firebase API.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_item_v2",
+    "description": "Get a specific item from Hacker News using its ID with limited response size.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_job_story_ids",
+    "description": "Get up to 200 latest job story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_latest_posts",
+    "description": "Get the latest posts from Hacker News based on optional filters.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_max_item_id",
+    "description": "Get the current largest item ID from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_new_stories",
+    "description": "Get up to 500 newest story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_show_hn_stories",
+    "description": "Retrieve up to 200 latest Show HN story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_today_posts",
+    "description": "Retrieves today's Hacker News posts filtered by minimum upvotes.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_top_stories",
+    "description": "Get up to 500 top story IDs from HackerNews including jobs.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_updates",
+    "description": "Get recently changed items and user profiles from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_user",
+    "description": "Retrieve a Hacker News user's public profile by their username.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_user_by_username",
+    "description": "Get a user profile by case-sensitive username from the HackerNews Firebase API.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "search_hn_posts",
+    "description": "Search Hacker News posts using full-text search powered by Algolia.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "add_sheet",
+    "description": "Adds a new sheet to a spreadsheet. Supports GRID, OBJECT, and DATA_SOURCE types.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "aggregate_column_data",
+    "description": "Searches for rows where a column matches a value and performs operations on another column.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "append_dimension",
+    "description": "Append new rows or columns to a sheet, increasing its size.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_clear_values_by_data_filter",
+    "description": "Clears ranges of values from a spreadsheet using data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_get_spreadsheet",
+    "description": "Retrieves data from specified cell ranges in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_update_spreadsheet",
+    "description": "Write values to a range in a Google Sheet, or append as new rows.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_update_values_by_data_filter",
+    "description": "Update values in ranges matching data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "clear_basic_filter",
+    "description": "Clear the basic filter from a sheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "clear_spreadsheet_values",
+    "description": "Clears cell content from a specified range, preserving formatting.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_chart",
+    "description": "Create a chart in a Google Sheets spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_spreadsheet",
+    "description": "Creates a new Google Spreadsheet in Google Drive.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_spreadsheet_column",
+    "description": "Creates a new column in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_spreadsheet_row",
+    "description": "Inserts a new empty row into a specified sheet at a given index.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "delete_dimension",
+    "description": "Delete specified rows or columns from a sheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "delete_sheet",
+    "description": "Delete a sheet (worksheet) from a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "find_and_replace",
+    "description": "Find and replace text in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "format_cell",
+    "description": "Applies text and background cell formatting to a specified range.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_conditional_format_rules",
+    "description": "List conditional formatting rules for sheets.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_data_validation_rules",
+    "description": "Extract data validation rules from a Google Sheets spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_sheet_names",
+    "description": "Lists all worksheet names from a specified Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_spreadsheet_by_data_filter",
+    "description": "Returns spreadsheet data filtered by specified data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_spreadsheet_info",
+    "description": "Retrieves comprehensive metadata for a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "insert_dimension",
+    "description": "Insert new rows or columns into a sheet at a specified location.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "look_up_spreadsheet_row",
+    "description": "Finds the first row where a cell exactly matches the query string.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "mutate_conditional_format_rules",
+    "description": "Add, update, delete, or reorder conditional format rules.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "search_developer_metadata",
+    "description": "Search for developer metadata in a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "search_spreadsheets",
+    "description": "Search for Google Spreadsheets using various filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "set_basic_filter",
+    "description": "Set a basic filter on a sheet in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "set_data_validation_rule",
+    "description": "Set or clear data validation rules on a range in Google Sheets.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "copy_sheet_to_another",
+    "description": "Copy a single sheet from a spreadsheet to another spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "append_values",
+    "description": "Append values to the end of an existing table in a Google Sheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_clear_values",
+    "description": "Clear one or more ranges of values from a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_get_values_by_data_filter",
+    "description": "Return ranges of values matching specified data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "update_sheet_properties",
+    "description": "Update properties of a sheet within a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "update_spreadsheet_properties",
+    "description": "Update spreadsheet-level properties like title, locale, time zone.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_update_values",
+    "description": "Set values in one or more ranges of a spreadsheet in a single operation.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "upsert_rows",
+    "description": "Upsert rows - update existing rows by key, append new ones.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_spreadsheet_values",
+    "description": "Returns a range of values from a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "update_spreadsheet_values",
+    "description": "Set values in a range of a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_DELETE",
+    "description": "Deletes an access control rule from a Google Calendar. Use when you need to remove sharing permissions for a user, group, or domain.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_GET",
+    "description": "Retrieves a specific access control rule for a calendar. Use when you need to check permissions for a specific user, group, or domain.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_INSERT",
+    "description": "Creates an access control rule for a calendar. Use when you need to grant sharing permissions to a user, group, or domain.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_LIST",
+    "description": "Retrieves the list of access control rules (ACLs) for a specified calendar, providing the necessary 'rule_id' values required for updating specific ACL rules.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_PATCH",
+    "description": "Updates an existing access control rule for a calendar using patch semantics (partial update). This allows modifying specific fields without affecting other properties. IMPORTANT: The ACL rule must already exist on the calendar. This action cannot create new rules. If you receive a 404 Not Found error, the rule does not exist - use ACL insert to create it first, or use ACL list to verify available rules. Each patch request consumes three quota units. For domain-type ACL rules, if PATCH fails with 500 error, this action will automatically fallback to UPDATE method.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_UPDATE",
+    "description": "Updates an access control rule for the specified calendar.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_ACL_WATCH",
+    "description": "Tool to watch for changes to ACL resources. Use when you need to set up real-time notifications for access control list modifications on a calendar.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_BATCH_EVENTS",
+    "description": "Execute up to 1000 event mutations (create/patch/delete) in one Google Calendar HTTP batch request with per-item status/results. Use this to materially reduce round-trips for bulk operations like migrations, cleanup, or large-scale updates.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDARS_DELETE",
+    "description": "Deletes a secondary calendar that you own or have delete permissions on. Deletion is permanent and irreversible \u2014 verify the correct calendar_id before calling. You cannot delete your primary calendar or calendars you only have read/write access to. Use calendarList.list to find calendars with owner accessRole. For primary calendars, use calendars.clear instead. Parallel calls may trigger userRateLimitExceeded; sequence bulk deletions.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDARS_UPDATE",
+    "description": "Full PUT-style update that overwrites all calendar metadata fields; unspecified optional fields are cleared. Use GOOGLECALENDAR_PATCH_CALENDAR to update only a subset of fields. Mutates the underlying calendar resource (title, description, timeZone, etc.); use GOOGLECALENDAR_CALENDAR_LIST_UPDATE to change per-user display properties like color.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDAR_LIST_DELETE",
+    "description": "Tool to remove a calendar from the user's calendar list. Use when you need to unsubscribe from or hide a calendar from the user's list.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDAR_LIST_GET",
+    "description": "Retrieves metadata for a SINGLE specific calendar from the user's calendar list by its calendar ID. This action requires a calendarId parameter and returns details about that one calendar only. NOTE: This does NOT list all calendars. To list all calendars in the user's calendar list, use GOOGLECALENDAR_CALENDAR_LIST_LIST instead.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDAR_LIST_INSERT",
+    "description": "Inserts an existing calendar into the user's calendar list, making it visible in the UI. Calendars (e.g., newly created ones) won't appear in the list or UI until explicitly inserted.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDAR_LIST_PATCH",
+    "description": "Updates an existing calendar on the user's calendar list using patch semantics. This method allows partial updates, modifying only the specified fields.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDAR_LIST_UPDATE",
+    "description": "Updates a calendar list entry's display/subscription settings (color, visibility, reminders, selection) for the authenticated user \u2014 does not modify the underlying calendar resource (title, timezone, etc.). To modify the calendar itself, use GOOGLECALENDAR_CALENDARS_UPDATE.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CALENDAR_LIST_WATCH",
+    "description": "Watch for changes to CalendarList resources using push notifications. Use this to receive real-time updates when calendar list entries are modified.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CHANNELS_STOP",
+    "description": "Tool to stop watching resources through a notification channel. Use when you need to discontinue push notifications for a specific channel subscription.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CLEAR_CALENDAR",
+    "description": "Clears a primary calendar by deleting all events from it. The calendar itself is preserved; only its events are removed. Primary calendars cannot be deleted entirely.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_COLORS_GET",
+    "description": "Returns the color definitions for calendars and events. Use when you need to retrieve the available color palette for styling calendars or events.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_CREATE_EVENT",
+    "description": "Create a Google Calendar event using start_datetime plus duration fields. The organizer is added as an attendee unless exclude_organizer is True. By default adds Google Meet link (works for Workspace, gracefully falls back for personal Gmail). Attendees can be email strings (required) or objects with email and optional fields. No conflict checking is performed; use GOOGLECALENDAR_FREE_BUSY_QUERY to detect overlaps before creating. Returns event id and htmlLink nested under data.response_data. Example: { \"start_datetime\": \"2025-01-16T13:00:00\", \"timezone\": \"America/New_York\", \"event_duration_hour\": 1, \"event_duration_minutes\": 30, \"summary\": \"Client sync\", \"attendees\": [\"required@example.com\", {\"email\": \"optional@example.com\", \"optional\": true}] }",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_DELETE_EVENT",
+    "description": "Deletes a specified event by `event_id` from a Google Calendar (`calendar_id`); idempotent \u2014 a 404 for an already-deleted event is a no-op. Bulk deletions may trigger `rateLimitExceeded` or `userRateLimitExceeded`; cap concurrency to 5\u201310 requests and apply exponential backoff.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_DUPLICATE_CALENDAR",
+    "description": "Creates a new, empty Google Calendar with the specified title (summary). Newly created calendars default to UTC timezone; use GOOGLECALENDAR_PATCH_CALENDAR afterward to set the desired timeZone if needed.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_GET",
+    "description": "Retrieves a SINGLE event by its unique event_id (REQUIRED). This action does NOT list or search events - it fetches ONE specific event when you already know its ID. If you want to list events within a time range, search for events, or filter by criteria like time_min/time_max, use GOOGLECALENDAR_EVENTS_LIST instead.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_IMPORT",
+    "description": "Tool to import an event as a private copy to a calendar. Use when you need to add an existing event to a calendar using its iCalUID. Only events with eventType='default' can be imported.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_INSTANCES",
+    "description": "Returns instances of the specified recurring event. Use timeMin/timeMax to constrain the window; omitting bounds can return large result sets and is quota-heavy. On high-volume calls, 403 rateLimitExceeded or 429 too_many_requests may occur; apply exponential backoff (1s, 2s, 4s) before retrying.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_LIST",
+    "description": "Returns events on the specified calendar. TIMEZONE WARNING: When using timeMin/timeMax with UTC timestamps (ending in 'Z'), the time window is interpreted in UTC regardless of the calendar's timezone. For example, querying '2026-01-19T00:00:00Z' to '2026-01-20T00:00:00Z' on a calendar in America/Los_Angeles (UTC-8) covers 2026-01-18 4pm to 2026-01-19 4pm local time, potentially missing events on the intended local date. To query for a specific local date, use timestamps with the appropriate timezone offset in timeMin/timeMax (e.g., '2026-01-19T00:00:00-08:00' for PST).",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_LIST_ALL_CALENDARS",
+    "description": "Return a unified event list across all calendars in the user's calendar list for a given time range. Use when you need a single view of all events across multiple calendars. An inverted or incorrect time range silently returns empty results rather than an error. An empty `items` list means no events matched the filters\u2014adjust `time_min`, `time_max`, or `q` before concluding no events exist.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_MOVE",
+    "description": "Moves an event to another calendar, i.e., changes an event's organizer.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_EVENTS_WATCH",
+    "description": "Watch for changes to Events resources. Watch channels expire; persist the channel `id` per `calendarId` to re-establish watches after expiration or restarts.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_FIND_EVENT",
+    "description": "Finds events in a specified Google Calendar using text query, time ranges (event start/end, last modification), and event types. Ensure `timeMin` is not chronologically after `timeMax` if both are provided. Results may span multiple pages; always follow `nextPageToken` until absent to avoid silently missing events. Validate the correct match from results by checking summary, start.dateTime, and organizer.email before using event_id for mutations. An empty `items` array means no events matched \u2014 widen filters rather than treating it as an error.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_FIND_FREE_SLOTS",
+    "description": "Finds both free and busy time slots in Google Calendars for specified calendars within a defined time range. If `time_min` is not provided, defaults to the current timestamp in the specified timezone. If `time_max` is not provided, defaults to 23:59:59 of the day specified in `time_min` (if provided), otherwise defaults to 23:59:59 of the current day in the specified timezone. Returns busy intervals and calculates free slots by finding gaps between busy periods; `time_min` must precede `time_max` if both are provided. This action retrieves free and busy time slots for the specified calendars over a given time period. It analyzes the busy intervals from the calendars and provides calculated free slots based on the gaps in the busy periods. Returned free slots are unfiltered by duration; callers must filter intervals to those fully containing the required meeting length. No event metadata (titles, descriptions, links) is returned; use GOOGLECALENDAR_EVENTS_LIST for event details.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_GET_CALENDAR",
+    "description": "Retrieves a specific Google Calendar, identified by `calendar_id`, to which the authenticated user has access. Response includes `timeZone` (IANA format, e.g., 'America/Los_Angeles') \u2014 use it directly when constructing `timeMin`/`timeMax` in other tools to avoid DST errors. An empty `defaultReminders` list is valid (no defaults configured). Insufficient `accessRole` may omit fields like `defaultReminders` and `colorId`.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_GET_CURRENT_DATE_TIME",
+    "description": "Gets the current date and time, allowing for a specific timezone offset. Call this tool first before computing relative dates (e.g., 'tomorrow', 'next Monday') to avoid off-by-one-day errors across timezones.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_LIST_CALENDARS",
+    "description": "Retrieves calendars from the user's Google Calendar list, with options for pagination and filtering. Loop through all pages using nextPageToken until absent to avoid missing calendars. Use the primary flag and accessRole field from the response to identify calendars \u2014 display names are not valid calendar_id values. Read access (listing) does not imply write OAuth scopes.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_LIST_SETTINGS",
+    "description": "Tool to return all user settings for the authenticated user. Use when you need to retrieve calendar settings.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_PATCH_CALENDAR",
+    "description": "Partially updates (PATCHes) an existing Google Calendar, modifying only the fields provided. At least one of summary, description, location, or timezone must be provided. Empty strings for `description` or `location` clear them.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_PATCH_EVENT",
+    "description": "Update specified fields of an existing event in a Google Calendar using patch semantics (array fields like `attendees` are fully replaced if provided); ensure the `calendar_id` and `event_id` are valid and the user has write access to the calendar.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_QUICK_ADD",
+    "description": "Parses natural language text to quickly create a basic Google Calendar event with its title, date, and time, suitable for simple scheduling; does not support direct attendee addition or recurring events, and `calendar_id` must be valid if not 'primary'.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_REMOVE_ATTENDEE",
+    "description": "Removes an attendee from a specified event in a Google Calendar; the calendar and event must exist. Concurrent calls on the same event can overwrite attendee lists \u2014 apply changes sequentially per event.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_SETTINGS_GET",
+    "description": "Tool to return a single user setting for the authenticated user. Use when you need to retrieve a specific calendar setting value.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_SETTINGS_LIST",
+    "description": "Returns all user settings for the authenticated user. Results include multiple settings keyed by id (e.g., `timeZone`); locate a specific setting by its `id` field. `timeZone` values are IANA identifiers (e.g., `America/New_York`) \u2014 use directly in datetime and event logic; align with `timeZone` from GOOGLECALENDAR_GET_CALENDAR for consistent notification times.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_SETTINGS_WATCH",
+    "description": "Watch for changes to Settings resources.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLECALENDAR_UPDATE_EVENT",
+    "description": "Updates an existing event in Google Calendar. REQUIRES event_id - you MUST first search for the event using GOOGLECALENDAR_FIND_EVENT or GOOGLECALENDAR_EVENTS_LIST to obtain the event_id. This is a full PUT replacement: omitted fields (including attendees, reminders, recurrence, conferencing) are cleared. Always provide the complete desired event state. Use GOOGLECALENDAR_PATCH_EVENT instead for partial edits.",
+    "server": "GoogleCalendar"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_ADD_PARENT",
+    "description": "Tool to add a parent folder for a file using Google Drive API v2. Use when you need to add a file to an additional folder.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_ADD_PROPERTY",
+    "description": "Tool to add a property to a file, or update it if it already exists (v2 API). Use when you need to attach custom key-value metadata to a Google Drive file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_COPY_FILE_ADVANCED",
+    "description": "Creates a copy of a file and applies any requested updates with patch semantics. Use when you need to duplicate a file with advanced options like label inclusion, visibility settings, or custom metadata.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_COMMENT",
+    "description": "Tool to create a comment on a file in Google Drive. Returns a nested `data` object; extract `data.id` for the resulting comment identifier. Omit `anchor` and `quoted_file_content_*` for general file-level comments.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_DRIVE",
+    "description": "Tool to create a new shared drive. Use when you need to programmatically create a new shared drive for collaboration or storage.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_FILE",
+    "description": "Creates a new file or folder with metadata. Native Google file types (Docs, Sheets, Forms, etc.) and folders are created as empty shells; content must be added manually in the Google UI afterward. Newly created files are private by default \u2014 set sharing permissions afterward for collaboration. For shared-drive folders, use this tool with the target folder ID in `parents` rather than GOOGLEDRIVE_CREATE_FOLDER.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_FILE_FROM_TEXT",
+    "description": "Creates a new file in Google Drive from provided text content (up to 10MB), supporting various formats including automatic conversion to Google Workspace types. Returns flat metadata fields (`id`, `mimeType`, `name`) at the top level \u2014 not nested under a `file` object. Created files are private by default; use a sharing tool afterward for collaborative access. Rapid successive calls may trigger `403 rateLimitExceeded` or `429 userRateLimitExceeded`; apply exponential backoff between retries. Does not support shared-drive targets in all cases.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_FOLDER",
+    "description": "Creates a new folder in Google Drive, optionally within an EXISTING parent folder specified by its ID or name. The parent folder MUST already exist - use GOOGLEDRIVE_FIND_FOLDER first to verify the parent exists or find its ID. Google Drive permits duplicate folder names, so always store and reuse the folder ID returned by this action rather than relying on names for future lookups.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_PERMISSION",
+    "description": "Tool to create a permission for a file or shared drive. Use when you need to share a file or folder with users, groups, domains, or make it publicly accessible. **Warning:** Concurrent permissions operations on the same file are not supported; only the last update is applied.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_REPLY",
+    "description": "Tool to create a reply to a comment in Google Drive. Use when you need to respond to an existing comment on a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_CREATE_SHORTCUT_TO_FILE",
+    "description": "Tool to create a shortcut to a file or folder in Google Drive. Use when you need to link to an existing Drive item from another location without duplicating it. The shortcut receives its own distinct file ID (capture from response). No parent folder parameter exists; use GOOGLEDRIVE_MOVE_FILE after creation to place the shortcut in the desired location.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_CHILD",
+    "description": "Tool to remove a child from a folder using Google Drive API v2. Use when you need to remove a file from a specific folder.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_COMMENT",
+    "description": "Permanently deletes a comment thread (and all its replies) from a Google Drive file \u2014 this action is irreversible. To remove only a single reply within a thread, use GOOGLEDRIVE_DELETE_REPLY instead. Verify the exact comment content and comment_id before calling.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_DRIVE",
+    "description": "Tool to permanently delete a shared drive. Use when you need to remove a shared drive and its contents (if specified).",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_PARENT",
+    "description": "Tool to remove a parent from a file using Google Drive API v2. Use when you need to remove a file from a specific folder.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_PERMISSION",
+    "description": "Deletes a permission from a file by permission ID. Deletion is irreversible \u2014 confirm the target user, group, or permission type before executing. IMPORTANT: You must first call GOOGLEDRIVE_LIST_PERMISSIONS to get valid permission IDs. To fully revoke public access, the type='anyone' (link-sharing) permission must be explicitly deleted; revoking other permissions leaves the file publicly accessible via link. Use when you need to revoke access for a specific user or group from a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_PROPERTY",
+    "description": "Tool to delete a property from a file using Google Drive API v2. Use when you need to remove custom key-value metadata from a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_REPLY",
+    "description": "Tool to delete a specific reply by reply ID. Deletion is irreversible; obtain explicit user confirmation before calling. Removes only the targeted reply, not the full comment thread \u2014 use GOOGLEDRIVE_DELETE_COMMENT to remove the entire thread.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DELETE_REVISION",
+    "description": "Tool to permanently delete a file revision. Use when you need to remove a specific version of a binary file (images, videos, etc.). Cannot delete revisions for Google Docs/Sheets or the last remaining revision.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DOWNLOAD_FILE",
+    "description": "Downloads a file from Google Drive by its ID. For Google Workspace documents (Docs, Sheets, Slides), optionally exports to a specified `mime_type`. For other file types, downloads in their native format regardless of mime_type. Examples: Export a Google Doc to plain text: {\"file_id\": \"1N2o5xQWmAbCdEfGhIJKlmnOPq\", \"mime_type\": \"text/plain\"} Download a Google Sheet as CSV: {\"file_id\": \"1ZyXwVuTsRqPoNmLkJiHgFeDcB\", \"mime_type\": \"text/csv\"}",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_DOWNLOAD_FILE_OPERATION",
+    "description": "Tool to download file content using long-running operations. Use when you need to download Google Vids files or export Google Workspace documents as part of a long-running operation. Operations are valid for 24 hours from creation. Returns a response containing `downloaded_file_content.s3url` \u2014 a short-lived S3 URL; fetch the actual file bytes from that URL promptly after the call.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_EDIT_FILE",
+    "description": "Updates an existing Google Drive file with binary content by overwriting its entire content with new text (max 10MB). IMPORTANT: This action only works with files that have binary content (text files, PDFs, images, etc.). It does NOT support editing Google Workspace native files (Google Docs, Sheets, Slides, etc.). For Google Workspace files, use the Google Docs API, Google Sheets API, or Google Slides API directly. Preserves the original file_id (unlike GOOGLEDRIVE_UPLOAD_FILE which creates a new ID).",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_EMPTY_TRASH",
+    "description": "Tool to permanently and irreversibly delete ALL trashed files in the user's Google Drive or a specified shared drive. Recovery is impossible after execution \u2014 no Drive tool can restore items once trash is emptied. Affects every item in trash across the entire account or shared drive, not just files from the current workflow. Always obtain explicit user confirmation and clarify that recovery is impossible before executing. Provide driveId to target a specific shared drive's trash; omit to empty the user's root trash.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_EXPORT_GOOGLE_WORKSPACE_FILE",
+    "description": "Exports a Google Workspace document to the requested MIME type and returns exported file content. Use when you need to export Google Docs, Sheets, Slides, Drawings, or Apps Script files to a specific format. Note: The exported content is limited to 10MB by Google Drive API.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_FIND_FILE",
+    "description": "The comprehensive Google Drive search tool that handles all file and folder discovery needs. Use this for any file finding task - from simple name searches to complex queries with date filters, MIME types, permissions, custom properties, folder scoping, and more. Searches across My Drive and shared drives with full metadata support. Examples: - Find PDFs: q=\"mimeType = 'application/pdf'\" - Find recent files: q=\"modifiedTime > '2024-01-01T00:00:00'\" - Search by name: q=\"name contains 'report'\" - Files in folder: folderId=\"abc123\" or q=\"'FOLDER_ID' in parents\"",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_FIND_FOLDER",
+    "description": "Tool to find a folder in Google Drive by its name and optionally a parent folder. Use when you need to locate a specific folder to perform further actions like creating files in it or listing its contents.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GENERATE_IDS",
+    "description": "Generates a set of file IDs which can be provided in create or copy requests. Use when you need to pre-allocate IDs for new files or copies.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_ABOUT",
+    "description": "Tool to retrieve information about the user, the user's Drive, and system capabilities. Use when you need to check storage quotas, user details, or supported import/export formats. Note: storageQuota reflects My Drive (personal) storage only \u2014 it does not cover shared drives; use GOOGLEDRIVE_LIST_SHARED_DRIVES and GOOGLEDRIVE_GET_DRIVE for shared drive quotas. A successful response confirms base Drive read access only; write access and shared drive access must be verified separately.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_APP",
+    "description": "Tool to get information about a specific Drive app by ID. Use 'self' as the app ID to get information about the calling app.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_CHANGES_START_PAGE_TOKEN",
+    "description": "Tool to get the starting pageToken for listing future changes in Google Drive. Returns only a token \u2014 pass it to GOOGLEDRIVE_LIST_CHANGES to retrieve actual changes. Persist this token; losing it requires a full rescan. The token is forward-looking: GOOGLEDRIVE_LIST_CHANGES may return no results if no changes have occurred since issuance. For simple recent-file lookups, prefer GOOGLEDRIVE_FIND_FILE; use this tool only for incremental change-feed workflows.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_CHILD",
+    "description": "Tool to get a specific child reference for a folder using Drive API v2. Use when you need to verify a specific file exists as a child of a folder.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_COMMENT",
+    "description": "Tool to get a comment by ID. Use when you need to retrieve a specific comment from a Google Drive file and have both the file ID and comment ID.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_DRIVE",
+    "description": "Tool to get a shared drive by ID. Use when you need to retrieve information about a specific shared drive. To discover drive_ids, use GOOGLEDRIVE_LIST_SHARED_DRIVES first; GOOGLEDRIVE_GET_ABOUT reflects overall user storage, not individual shared drive details. Permission changes may have a brief propagation delay before appearing in results.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_FILE_METADATA",
+    "description": "Tool to get a file's metadata by ID. Use to verify `mimeType`, `parents`, and `trashed` status before destructive operations (delete/move/export), or to confirm `mimeType='application/vnd.google-apps.document'` before calling GOOGLEDOCS_* tools (non-native files require GOOGLEDRIVE_DOWNLOAD_FILE). Only returns metadata visible to the connected account; public access requires GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE. High-frequency calls risk `403 rateLimitExceeded`; apply exponential backoff.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_FILE_PROPERTY",
+    "description": "Tool to get a property by its key using Google Drive API v2. Use when you need to retrieve a specific custom property attached to a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_PARENT",
+    "description": "Tool to get a specific parent reference for a file using Drive API v2. Use when you need to retrieve information about a specific parent folder of a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_PERMISSION",
+    "description": "Gets a permission by ID. Use this tool to retrieve a specific permission for a file or shared drive. Newly created or updated permissions on shared drives may have a brief propagation delay before appearing.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_PERMISSION_ID_FOR_EMAIL",
+    "description": "Tool to get the permission ID for an email address using the Drive API v2. Use when you need to convert an email address to its corresponding permission ID.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_REPLY",
+    "description": "Tool to get a specific reply to a comment on a file. Use when you need to retrieve the details of a particular reply.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GET_REVISION",
+    "description": "Tool to get a specific revision's metadata (name, modifiedTime, keepForever, etc.) by revision ID. Returns metadata only \u2014 not file content. Use a separate download tool to retrieve file content or restore a revision.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_GOOGLE_DRIVE_DELETE_FOLDER_OR_FILE_ACTION",
+    "description": "Tool to delete a file or folder in Google Drive. Use when you need to permanently remove a specific file or folder using its ID. Note: This action is irreversible. Deleting a folder permanently removes all nested files and subfolders.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_HIDE_DRIVE",
+    "description": "Tool to hide a shared drive from the default view. Use when you want to remove a shared drive from the user's main Google Drive interface without deleting it.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_INSERT_CHILD",
+    "description": "Tool to insert a file into a folder using Drive API v2. Use when you need to add an existing file to a folder.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_ACCESS_PROPOSALS",
+    "description": "Tool to list pending access proposals on a file. Use when you need to retrieve access proposals for a specific file. Note: Only approvers can list access proposals; non-approvers will receive a 403 error.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_APPROVALS",
+    "description": "Tool to list approvals on a file for workflow-based access control. Use when you need to retrieve all approvals associated with a specific file in Google Drive.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_CHANGES",
+    "description": "Tool to list the changes for a user or shared drive. Use when a full incremental change feed is needed (for simple recent-file lookups, prefer GOOGLEDRIVE_FIND_FILE instead). Tracks modifications such as creations, deletions, or permission changes. The pageToken is optional - if not provided, the current start page token will be automatically fetched; an empty result is valid if no recent activity has occurred. Example usage: ```json { \"pageToken\": \"22633\", \"pageSize\": 100, \"includeRemoved\": true } ``` Returns changes with timestamps, file IDs, and modification details. Paginate by following `nextPageToken` until it is absent \u2014 stopping early will silently omit changes. Save `newStartPageToken` to monitor future changes efficiently.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_CHILDREN_V2",
+    "description": "Tool to list a folder's children using Google Drive API v2. Use when you need to retrieve all files and folders within a specific folder.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_COMMENTS",
+    "description": "Tool to list all comments for a file in Google Drive. Results are paginated; iterate using nextPageToken until absent to retrieve all comments. Filtering by author, content, or other criteria must be done client-side. Use commentId, createdTime, and author from results to uniquely identify comments before acting on them.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_FILE_LABELS",
+    "description": "Tool to list the labels already applied to a file in Google Drive. An empty labels array is a valid response indicating no labels are applied, not an error. This tool shows only applied labels; label_id and field_id values required by other Drive label tools must be obtained from admin configuration.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_FILE_PROPERTIES",
+    "description": "Tool to list a file's properties in Google Drive API v2. Use when you need to retrieve custom properties (key-value pairs) attached to a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_PERMISSIONS",
+    "description": "Tool to list a file's permissions. Use when you need to retrieve all permissions associated with a specific file or shared drive.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_REPLIES",
+    "description": "Tool to list replies to a comment in Google Drive. Use this when you need to retrieve all replies associated with a specific comment on a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_REVISIONS",
+    "description": "Tool to list a file's revision metadata (not content) in Google Drive. Drive may prune old revisions, so history may be incomplete for frequently edited files. Filter client-side for specific revisionIds; do not assume the last entry is the active version.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_LIST_SHARED_DRIVES",
+    "description": "Tool to list the user's shared drives. Use when you need to get a list of all shared drives accessible to the authenticated user. Results may differ from the web UI due to admin policies; listing a drive does not guarantee access to its contents. Paginated calls may trigger 403 rateLimitExceeded or 429 tooManyRequests; apply exponential backoff when iterating many pages.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_MODIFY_FILE_LABELS",
+    "description": "Modifies the set of labels applied to a file. Returns a list of the labels that were added or modified. Use when you need to programmatically change labels on a Google Drive file, such as adding, updating, or removing them.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_MOVE_FILE",
+    "description": "Tool to move a file from one folder to another in Google Drive. To truly move (not just copy the parent), always provide both `add_parents` (destination folder ID) and `remove_parents` (source folder ID); omitting `remove_parents` leaves the file in multiple folders. Useful for reorganizing files, including newly created Google Docs/Sheets that default to Drive root.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_PATCH_PERMISSION",
+    "description": "Tool to update a permission using patch semantics. Use when you need to modify specific fields of an existing permission without affecting other fields. **Warning:** Concurrent permissions operations on the same file are not supported; only the last update is applied.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_PATCH_PROPERTY",
+    "description": "Tool to update a property on a file using PATCH semantics (v2 API). Use when you need to partially update custom key-value metadata attached to a Google Drive file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_RESUMABLE_UPLOAD",
+    "description": "Tool to start and complete a Google Drive resumable upload session. Use for files larger than ~5 MB to avoid timeouts or size-limit failures. HTTP 308 means continue the session from the correct byte offset; HTTP 410 means the session expired and a full restart with a new session is required.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_STOP_WATCH_CHANNEL",
+    "description": "Tool to stop watching resources through a specified channel. Use this when you want to stop receiving notifications for a previously established watch. Both `id` and `resourceId` must be saved from the original watch response \u2014 they cannot be retrieved after the fact.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_TRASH_FILE",
+    "description": "Tool to move a file or folder to trash (soft delete). Use when you need to delete a file but want to allow recovery via UNTRASH_FILE. This action is distinct from permanent deletion and provides a safer cleanup workflow.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UNHIDE_DRIVE",
+    "description": "Tool to unhide a shared drive. Use when you need to restore a shared drive to the default view.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UNTRASH_FILE",
+    "description": "Tool to restore a file from the trash. Use when you need to recover a deleted file. This action updates the file's metadata to set the 'trashed' property to false. Only works while the file remains in trash \u2014 recovery is impossible after trash is emptied via GOOGLEDRIVE_EMPTY_TRASH or auto-purged by policy.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_COMMENT",
+    "description": "Tool to update an existing comment on a Google Drive file. Use when you need to change the content of a comment. NOTE: The 'resolved' field is read-only in the Google Drive API. To resolve or reopen a comment, use CREATE_REPLY with action='resolve' or action='reopen'.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_DRIVE",
+    "description": "Tool to update the metadata for a shared drive. Use when you need to modify properties like the name, theme, background image, or restrictions of a shared drive.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_FILE_METADATA_PATCH",
+    "description": "Tool to update file metadata using the Drive API v2 PATCH method. Use when you need to modify file properties like title, description, or labels using patch semantics.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_FILE_PROPERTY",
+    "description": "Tool to update a property on a file using Google Drive API v2. Use when you need to modify an existing custom property attached to a file.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_FILE_PUT",
+    "description": "Updates file metadata. Uses PATCH semantics (partial update) as per Google Drive API v3 \u2014 only explicitly provided fields are updated, so omit fields you do not intend to overwrite. Use this tool to modify attributes of an existing file like its name, description, or parent folders. To move a file, supply add_parents and remove_parents together; omitting remove_parents creates multiple parents, omitting add_parents can orphan the file. Bulk updates may trigger 429 Too Many Requests; apply exponential backoff. Note: supports metadata updates only; file content updates are not yet implemented.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_FILE_REVISION_METADATA",
+    "description": "Updates ONLY the metadata properties of a specific file revision (keepForever, published, publishAuto, publishedOutsideDomain). IMPORTANT: This action does NOT update file content. To update file content, use EDIT_FILE or UPDATE_FILE_PUT instead. This action requires BOTH file_id AND revision_id parameters. Use LIST_REVISIONS to get available revision IDs for a file. Valid parameters: file_id (required), revision_id (required), keep_forever, published, publish_auto, published_outside_domain. Invalid parameters (use other actions): file_contents, mime_type, content, name - these are NOT supported by this action.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_PERMISSION",
+    "description": "Tool to update a permission with patch semantics. Use when you need to modify an existing permission for a file or shared drive. Inherited or domain-managed permissions may not be editable; verify editability with GOOGLEDRIVE_LIST_PERMISSIONS before updating.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPDATE_REPLY",
+    "description": "Tool to update a reply to a comment on a Google Drive file. Use when you need to modify the content of an existing reply.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPLOAD_FILE",
+    "description": "Uploads a file (max 5MB) to Google Drive, placing it in the specified folder or root if no valid folder ID is provided. Always creates a new file (never updates existing); use GOOGLEDRIVE_EDIT_FILE to update with a stable file_id. Uploaded files are private by default; configure sharing via GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPLOAD_FROM_URL",
+    "description": "Tool to fetch a file from a provided URL server-side and upload it into Google Drive. Use when you need to reliably persist externally hosted files into Drive without client-side downloads or temporary storage.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_UPLOAD_UPDATE_FILE",
+    "description": "Tool to update file content in Google Drive by uploading new binary content. Use when you need to replace the contents of an existing file with new file data.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_WATCH_CHANGES",
+    "description": "Tool to subscribe to changes for a user or shared drive in Google Drive. Use when you need to monitor a Google Drive for modifications and receive notifications at a specified webhook URL. Notifications may be batched rather than per-change; design handlers to be idempotent and fetch all changes since the last known page_token on each notification.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "GOOGLEDRIVE_WATCH_FILE",
+    "description": "Tool to subscribe to push notifications for changes to a specific file. Use when you need to monitor a file for modifications and receive real-time notifications at a webhook URL.",
+    "server": "GoogleDrive"
+  },
+  {
+    "tool_name": "CALENDLY_CANCEL_SCHEDULED_EVENT",
+    "description": "Tool to cancel a scheduled Calendly event by creating a cancellation record. Use when you need to permanently cancel an existing, active event. The cancellation will trigger notifications to all invitees.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_CREATE_EVENT_TYPE",
+    "description": "Tool to create a new one-on-one event type (kind: solo) in Calendly. Use when you need to programmatically create a new event type for scheduling meetings.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_CREATE_ONE_OFF_EVENT_TYPE",
+    "description": "Creates a temporary Calendly one-off event type for unique meetings outside regular availability, requiring valid host/co-host URIs, a future date/range for `date_setting`, and a positive `duration`.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_CREATE_SCHEDULING_LINK",
+    "description": "Create a single-use scheduling link. Creates a scheduling link that can be used to book an event. The link allows invitees to schedule up to the specified maximum number of events. Once the limit is reached, the link becomes inactive.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_CREATE_SHARE",
+    "description": "Creates a customizable, one-time share link for a Calendly event type, allowing specific overrides to its settings (e.g., duration, availability, location) without altering the original event type.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_CREATE_SINGLE_USE_SCHEDULING_LINK",
+    "description": "Creates a one-time, single-use scheduling link for an active Calendly event type, expiring after one booking.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_CREATE_WEBHOOKS",
+    "description": "Tool to create a webhook subscription for receiving Calendly event notifications. Use when you need to set up automated notifications for events like meeting bookings or cancellations. Organization scope triggers webhooks for all events organization-wide, while user/group scopes limit triggering to specific users or groups.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_DELETE_INVITEE_DATA",
+    "description": "Permanently removes all invitee data associated with the provided emails from past organization events, for data privacy compliance (requires Enterprise subscription; deletion may take up to one week).",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_DELETE_INVITEE_NO_SHOW",
+    "description": "Deletes an Invitee No-Show record by its `uuid` to reverse an invitee's 'no-show' status; the `uuid` must refer to an existing record.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_DELETE_ORGANIZATION_MEMBERSHIP",
+    "description": "Tool to remove a user from a Calendly organization by membership UUID. Use when you need to revoke a user's access to an organization. Requires admin rights; organization owners cannot be removed.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_DELETE_SCHEDULED_EVENT_DATA",
+    "description": "For Enterprise users, initiates deletion of an organization's scheduled event data between a `start_time` and `end_time` (inclusive, where `start_time` must be <= `end_time`); actual data deletion may take up to 7 days to complete.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_DELETE_WEBHOOK_SUBSCRIPTION",
+    "description": "Deletes an existing webhook subscription to stop Calendly sending event notifications to its registered callback URL; this operation is idempotent.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_EVENT",
+    "description": "Use to retrieve a specific Calendly scheduled event by its UUID, provided the event exists in the user's Calendly account.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_EVENT_INVITEE",
+    "description": "Retrieves detailed information about a specific invitee of a scheduled event, using their unique UUIDs.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_EVENT_TYPE",
+    "description": "Retrieves details for a specific Calendly event type, identified by its UUID, which must be valid and correspond to an existing event type.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_EVENT_TYPE_AVAILABILITY",
+    "description": "Tool to retrieve availability schedules configured for a specific Calendly event type. Use when you need to get the availability rules including day-of-week schedules and date-specific overrides.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_GROUP",
+    "description": "Retrieves all attributes of a specific Calendly group by its UUID; the group must exist.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_GROUP_RELATIONSHIP",
+    "description": "Retrieves a specific Calendly group relationship by its valid and existing UUID, providing details on user-group associations and membership.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_INVITEE_NO_SHOW",
+    "description": "Retrieves details for a specific Invitee No Show record by its UUID; an Invitee No Show is marked when an invitee does not attend a scheduled event.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_ORGANIZATION",
+    "description": "Tool to retrieve information about a specific Calendly organization. Use when you need to get organization details such as name, slug, or timestamps.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_ORGANIZATION_INVITATION",
+    "description": "Retrieves a specific Calendly organization invitation using its UUID and the parent organization's UUID.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_ORGANIZATION_MEMBERSHIP",
+    "description": "Retrieves a specific Calendly organization membership by its UUID, returning all its attributes.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_ROUTING_FORM",
+    "description": "Retrieves a specific routing form by its UUID, providing its configuration details including questions and routing logic.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_ROUTING_FORM_SUBMISSION",
+    "description": "Tool to retrieve details about a specific routing form submission by its UUID. Use when you need submission details including questions, answers, and routing results.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_SAMPLE_WEBHOOK_DATA",
+    "description": "Tool to retrieve sample webhook payload data for testing webhook subscriptions. Use when you need to verify webhook setup and understand the data structure before creating actual webhook subscriptions.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_USER",
+    "description": "Retrieves comprehensive details for an existing Calendly user.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_USER_AVAILABILITY_SCHEDULE",
+    "description": "Retrieves an existing user availability schedule by its UUID; this schedule defines the user's default hours of availability.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_GET_WEBHOOK_SUBSCRIPTION",
+    "description": "Retrieves the details of an existing webhook subscription, identified by its UUID, including its callback URL, subscribed events, scope, and state.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_INVITEE_NO_SHOW",
+    "description": "Tool to mark an invitee as a no-show for a scheduled event. Use when an invitee fails to attend their scheduled meeting and you need to record their absence in Calendly.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_ACTIVITY_LOG_ENTRIES",
+    "description": "Retrieves a list of activity log entries for a specified Calendly organization (requires an active Enterprise subscription), supporting filtering, sorting, and pagination.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_EVENT_INVITEES",
+    "description": "Retrieves a list of invitees for a specified Calendly event UUID, with options to filter by status or email, and sort by creation time.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_EVENT_TYPES",
+    "description": "Tool to list all Event Types associated with a specified User or Organization. Use when you need to retrieve event types for a user or organization. Use scheduling_url from results directly; do not manually construct event type URLs.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_EVENT_TYPE_AVAILABLE_TIMES",
+    "description": "Fetches available time slots for a Calendly event type within a specified time range; results are not paginated.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_EVENT_TYPE_MEMBERSHIPS",
+    "description": "Tool to retrieve a list of event type hosts (memberships) for a specific event type. Use when you need to see which users are configured as hosts for an event type.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_GROUPS",
+    "description": "Returns a list of groups for a specified Calendly organization URI, supporting pagination.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_GROUP_RELATIONSHIPS",
+    "description": "Retrieves a list of group relationships defining an owner's role (e.g., member, admin) within a group; an owner can have one membership per group but multiple admin roles across different groups.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_ORGANIZATION_INVITATIONS",
+    "description": "Retrieves a list of invitations for a specific organization, identified by its UUID.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_ORGANIZATION_MEMBERSHIPS",
+    "description": "Retrieves a list of organization memberships.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_OUTGOING_COMMUNICATIONS",
+    "description": "Retrieves a list of outgoing SMS communications for a specified organization; requires an Enterprise subscription and if filtering by creation date, both `min_created_at` and `max_created_at` must be provided to form a valid range.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_ROUTING_FORMS",
+    "description": "Retrieves routing forms for a specified organization; routing forms are questionnaires used to direct invitees to appropriate booking pages or external URLs.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_SCHEDULED_EVENTS",
+    "description": "Tool to retrieve a list of scheduled Calendly events. Use when you need to view events for a specific user, organization, or group. Requires exactly one of user, organization, or group parameter to scope the query.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_USER_AVAILABILITY_SCHEDULES",
+    "description": "Retrieves all availability schedules for the specified Calendly user.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_USER_BUSY_TIMES",
+    "description": "Fetches a user's busy time intervals (internal and external calendar events) in ascending order for a period up to 7 days; keyset pagination is not supported.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_USER_LOCATIONS",
+    "description": "Tool to retrieve configured meeting location information for a given Calendly user. Use when you need to see all available location options configured by a user for their meetings.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_LIST_WEBHOOK_SUBSCRIPTIONS",
+    "description": "Retrieves webhook subscriptions for a Calendly organization; `scope` determines if `user` or `group` URI is also required for filtering.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_ORGANIZATION_INVITATION",
+    "description": "Tool to invite a user to a Calendly organization via email. Use when you need to send an organization invitation to a new user. Requires organization owner or admin privileges.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_POST_INVITEE",
+    "description": "Tool to create a new Event Invitee with standard notifications, calendar invites, reschedules, and workflows. Use when programmatically scheduling meetings via API. Requires paid Calendly plan (Standard+).",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_REMOVE_USER_FROM_ORGANIZATION",
+    "description": "Removes a user (who is not an owner) from an organization by their membership UUID, requiring administrative privileges.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_REVOKE_USER_S_ORGANIZATION_INVITATION",
+    "description": "Revokes a pending and revokable (not yet accepted or expired) organization invitation using its UUID and the organization's UUID, rendering the invitation link invalid.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_UPDATE_EVENT_TYPE",
+    "description": "Tool to update an existing one-on-one event type (kind: solo) in Calendly. Use when you need to modify event type settings such as name, duration, location, or description. NOTE: Currently only supports one-on-one event types.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "CALENDLY_UPDATE_EVENT_TYPE_AVAILABILITY",
+    "description": "Tool to update an event type availability schedule in Calendly. Use when you need to change the timezone or availability rules for an event type. WARNING: Updating rules will overwrite all existing rules - retrieve existing rules first using GET /event_type_availability_schedules.",
+    "server": "Calendly"
+  },
+  {
+    "tool_name": "FIGMA_ADD_A_COMMENT_TO_A_FILE",
+    "description": "Posts a new comment to a Figma file or branch, optionally replying to an existing root comment (replies cannot be nested); `region_height` and `region_width` in `client_meta` must be positive if defining a comment region.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_ADD_A_REACTION_TO_A_COMMENT",
+    "description": "Posts a specified emoji reaction to an existing comment in a Figma file or branch, requiring valid file_key and comment_id.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_CREATE_A_WEBHOOK",
+    "description": "Creates a Figma webhook to receive POST notifications when specific events occur. Webhooks can monitor events at three scopes: - Team level: monitors all files in a team (requires team admin permissions) - Project level: monitors all files in a project (requires edit access) - File level: monitors a specific file (requires edit access) Upon creation, Figma sends an initial PING event to verify your endpoint (unless status is PAUSED). IMPORTANT: team_id, project_id, and file_key cannot be discovered programmatically. Extract them from Figma URLs or use FIGMA_DISCOVER_FIGMA_RESOURCES to parse URLs.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_CREATE_DEV_RESOURCES",
+    "description": "Creates and attaches multiple uniquely-URLed development resources to specified Figma nodes, up to 10 per node.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_CREATE_MODIFY_DELETE_VARIABLES",
+    "description": "Manages variables, collections, modes, and their values in a Figma file via batch create/update/delete operations; use temporary IDs to link new related items in one request and ensure `variableModeValues` match the target variable's `resolvedType`.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DELETE_A_COMMENT",
+    "description": "Deletes a specific comment from a Figma file or branch, provided the authenticated user is the original author of the comment.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DELETE_A_REACTION",
+    "description": "Deletes a specific emoji reaction from a comment in a Figma file; the user must have originally created the reaction.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DELETE_A_WEBHOOK",
+    "description": "Permanently deletes an existing webhook, identified by its unique `webhook_id`; this operation is irreversible.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DELETE_DEV_RESOURCE",
+    "description": "Deletes a development resource (used to link Figma design elements to external developer information like code or tasks) from a specified Figma file.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DESIGN_TOKENS_TO_TAILWIND",
+    "description": "Convert design tokens to Tailwind CSS configuration. TWO-STEP WORKFLOW: 1. First, call FIGMA_EXTRACT_DESIGN_TOKENS with a Figma file_key to extract design tokens 2. Then, pass the returned DesignTokens object to this action's 'tokens' parameter This action generates: - tailwind.config.ts/js with theme extensions - Optional globals.css with font imports Note: Shadow colors can be provided in either string format (e.g., \"rgba(15, 110, 110, 0.32)\") or dictionary format (e.g., {\"r\": 0.059, \"g\": 0.431, \"b\": 0.431, \"a\": 0.32}).",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DETECT_BACKGROUND",
+    "description": "Detect background layers for selected nodes in a Figma file. This action analyzes the Figma document structure and identifies potential background elements for the given target nodes. It uses: - Geometric analysis (bounding box overlap/containment) - Z-index ordering (nodes earlier in the layer stack are behind later ones) - Visual properties (fills, node types) - Naming conventions (nodes named 'background', 'bg', etc.) Returns background candidates with confidence scores (0-1) and explanations.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DISCOVER_FIGMA_RESOURCES",
+    "description": "Smart Figma resource discovery - extract IDs from any Figma URL. Supports all URL formats: /file/, /design/, /board/, /proto/, /slides/ Example: figma.com/board/ABC123/Name \u2192 file_key=ABC123 Discovery workflow: team_id \u2192 projects \u2192 files \u2192 nodes Use extracted IDs with GetFileJson, DetectBackground, etc.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_DOWNLOAD_FIGMA_IMAGES",
+    "description": "Download images from Figma file nodes. Renders specified nodes as images and downloads them. Supports PNG, SVG, JPG, and PDF formats. REQUIRED PARAMETERS: - file_key (string): The Figma file key from the URL - images (array): List of objects, each containing: - node_id (string, required): The node ID to export (e.g., \"1:2\") - file_name (string, required): Output filename with extension (e.g., \"logo.png\") - format (string, optional): One of 'png', 'svg', 'jpg', 'pdf'. Defaults to 'png' Example usage: { \"file_key\": \"abc123XYZ\", \"images\": [ {\"node_id\": \"1:2\", \"file_name\": \"logo.png\", \"format\": \"png\"} ] } To find node IDs, use FIGMA_GET_FILE_JSON or look in Figma URLs after 'node-id='. NOTE: Returned image URLs expire shortly after generation \u2014 download them immediately.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_EXTRACT_DESIGN_TOKENS",
+    "description": "Extract design tokens from Figma files by combining styles, variables, and node-extracted values. Only values defined as Figma styles or variables are captured \u2014 any design values not encoded as styles/variables are silently omitted. Requires `file_variables:read` scope and a Figma plan that supports variables for full output; if variables return empty, supplement with FIGMA_GET_LOCAL_VARIABLES.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_EXTRACT_PROTOTYPE_INTERACTIONS",
+    "description": "Extract prototype interactions and animations from Figma files. Required parameter: - file_key: The Figma file key extracted from a URL like 'https://www.figma.com/file/ABC123xyz/MyFile' (the 'ABC123xyz' part) Analyzes the prototype data to extract: - User interactions (clicks, hovers, etc.) - Transition animations - Component variant states - User flows and navigation",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_ACTIVITY_LOGS",
+    "description": "Retrieves activity log events from Figma, allowing filtering by event types, time range, and pagination.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_A_WEBHOOK",
+    "description": "Retrieves detailed information about a specific webhook by its ID, provided the webhook exists and is accessible to the user.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_COMMENTS_IN_A_FILE",
+    "description": "Retrieves all comments from an existing Figma file, identified by a valid `file_key`, returning details like content, author, position, and reactions, with an option for Markdown formatted content.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_COMPONENT2",
+    "description": "Fetches metadata for a specific component using its unique identifier. Use when you need to retrieve published component details from a team library.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_COMPONENT_SET",
+    "description": "Retrieves detailed metadata for a specific published Figma component set using its unique `key`.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_CURRENT_USER",
+    "description": "Retrieves detailed information for the currently authenticated Figma user.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_DEV_RESOURCES",
+    "description": "Retrieves development resources (e.g., Jira/GitHub links) for a Figma main file, optionally filtering by specific node IDs.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILES_IN_A_PROJECT",
+    "description": "Fetches a list of files in a Figma project, optionally including branch metadata.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILE_COMPONENTS",
+    "description": "Retrieves published components from a Figma file, which must be a main file (not a branch) acting as a library.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILE_COMPONENT_SETS",
+    "description": "Retrieves all published component sets from the specified Figma main file (file_key must not be for a branch).",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILE_JSON",
+    "description": "Get Figma Design file data with automatic simplification. IMPORTANT: Only supports Design files (figma.com/design/{file_key}). FigJam board files (figma.com/board/{file_key}) and Slides files (figma.com/slides/{file_key}) are NOT supported and will return a 400 error: \"File type not supported by this endpoint\". This enhanced version automatically transforms verbose Figma JSON into clean, AI-friendly format with: - CSS-like property names - Deduplicated variables - Removed empty values - 70%+ size reduction Use simplify=False to get raw API response.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILE_METADATA",
+    "description": "Get Figma file metadata including name, creator, last modification details, thumbnail, and access information. Use when you need quick file overview without the full document tree.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILE_NODES",
+    "description": "Fetch JSON for specific node IDs from a Figma file to avoid full-file payload limits. Use when you already know target node IDs (from shallow file fetch or component listings) or when full-file JSON has hit payload limits. Prefer depth=1 for fast discovery.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_FILE_STYLES",
+    "description": "Retrieves a list of published styles (like colors, text attributes, effects, and layout grids) from a specified main Figma file (not a branch).",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_IMAGE_FILLS",
+    "description": "Retrieves temporary (14-day expiry) download URLs for all image fills in a Figma file; requires `imageRef` from `Paint` objects to map URLs.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LIBRARY_ANALYTICS_COMPONENT_ACTION_DATA",
+    "description": "Retrieves component insertion and detachment analytics for a specified Figma library, groupable by 'component' or 'team' and filterable by a date range (YYYY-MM-DD).",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LIBRARY_ANALYTICS_COMPONENT_USAGE_DATA",
+    "description": "Retrieves component usage analytics for a specified Figma library file (identified by `file_key`), with data groupable by 'component' or 'file'.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LIBRARY_ANALYTICS_STYLE_ACTION_DATA",
+    "description": "Retrieves style usage analytics (insertions, detachments) for a Figma library, grouped by 'style' or 'team'; if providing a date range, ensure end_date is not before start_date.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LIBRARY_ANALYTICS_STYLE_USAGE_DATA",
+    "description": "Retrieves style usage analytics for a published Figma library. Returns data about how styles (colors, text styles, effects, grids) from the library are being used across your organization. Requires Enterprise plan and library_analytics:read scope. Group results by 'style' to see per-style metrics or by 'file' to see which files use the library's styles.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LIBRARY_ANALYTICS_VARIABLE_ACTION_DATA",
+    "description": "Retrieves weekly, paginated analytics data on variable insertions and detachments for a specified Figma library (identified by `file_key`), groupable by 'variable' or 'team', and filterable by an optional date range. Note: Requires Enterprise plan and library_analytics:read scope.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LIBRARY_ANALYTICS_VARIABLE_USAGE_DATA",
+    "description": "Retrieves paginated analytics data on variable usage from a specified Figma library, grouped by 'file' or 'variable', for libraries with enabled analytics.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_LOCAL_VARIABLES",
+    "description": "Retrieves all local/remote variables for a Figma file/branch; crucial for obtaining mode-specific values which `/v1/files/{file_key}/variables/published` omits.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_PAYMENTS",
+    "description": "Retrieves a user's payment information for a Figma plugin, widget, or Community file; the authenticated identity must own the resource.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_PROJECTS_IN_A_TEAM",
+    "description": "Retrieves projects within a specified Figma team that are visible to the authenticated user.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_PUBLISHED_VARIABLES",
+    "description": "Retrieves variables published from a specified Figma file; this API is available only to full members of Enterprise organizations.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_REACTIONS_FOR_A_COMMENT",
+    "description": "Retrieves reactions for a specific comment in a Figma file.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_SCIM_SERVICE_PROVIDER_CONFIG",
+    "description": "Get Figma's SCIM service provider configuration. Returns configuration details including which SCIM operations are supported (patch, bulk, filter, etc.), authentication schemes, and service capabilities.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_STYLE",
+    "description": "Retrieves detailed metadata for a specific style in Figma using its unique style key.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_TEAM_COMPONENTS",
+    "description": "Retrieves components published in a specific Figma team's library; the team must have published components, otherwise an empty list is returned.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_TEAM_COMPONENT_SETS",
+    "description": "Retrieves a paginated list of published component sets (collections of reusable UI elements) from a specified Figma team's library.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_TEAM_STYLES",
+    "description": "Retrieves a paginated list of published styles (fill colors, text styles, effects, grids) from a specified Figma team's library. Note: The team must have published styles in its library for this endpoint to return data. Teams without published styles will return an empty list.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_TEAM_WEBHOOKS",
+    "description": "Retrieves all webhooks registered for a specified Figma context (team, project, or file). Uses the Figma Webhooks V2 API endpoint (GET /v2/webhooks) with context and context_id query parameters. This is the recommended approach as the legacy path-based endpoint (/v2/teams/{team_id}/webhooks) is deprecated. Note: team_id, project_id, and file_key cannot be discovered programmatically via the API. Extract them from Figma URLs or use FIGMA_DISCOVER_FIGMA_RESOURCES to parse URLs.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_VERSIONS_OF_A_FILE",
+    "description": "Retrieves the version history for a Figma file or branch, as specified by its `file_key`.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_GET_WEBHOOK_REQUESTS",
+    "description": "Retrieves a history of webhook requests for a specific Figma webhook subscription; data is available for requests sent within the last seven days.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_RENDER_IMAGES_OF_FILE_NODES",
+    "description": "Render Figma nodes as images (PNG, JPG, SVG, PDF). Returns a map of node IDs to temporary image URLs (valid for 30 days). Images are capped at 32 megapixels; larger requests are automatically scaled down. REQUIRED PARAMETERS: - file_key: Figma file key from URL (e.g., 'abc123XYZ' from figma.com/design/abc123XYZ/...) - ids: Comma-separated node IDs to render (e.g., '1:2' or '1:2,1:3,1:4') NODE IDs: Found in Figma URLs after 'node-id=' or from FIGMA_GET_FILE_JSON response. FORMATS: - png/jpg: Raster images with optional scale (0.01-4.0) - svg: Vector graphics with text outline options - pdf: Document format COMMON ISSUES: - null value in images map = node failed to render (invalid ID, invisible, 0% opacity) - 404 error = file_key not found or no access - 429 error = rate limit exceeded, wait and retry",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_UPDATE_A_WEBHOOK",
+    "description": "Updates an existing Figma webhook, identified by `webhook_id`, allowing modification of its event type, endpoint, passcode, status, or description.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "FIGMA_UPDATE_DEV_RESOURCES",
+    "description": "Updates the name and/or URL of one or more existing Figma Dev Resources, each identified by its unique `id`.",
+    "server": "Figma"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_COPY_DOCUMENT",
+    "description": "Tool to create a copy of an existing Google Document. Use this to duplicate a document, for example, when using an existing document as a template. The copied document will have a default title (e.g., 'Copy of [original title]') if no new title is provided, and will be placed in the user's root Google Drive folder.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_DOCUMENT",
+    "description": "Creates a new Google Docs document using the provided title as filename and inserts the initial text at the beginning if non-empty, returning the document's ID and metadata (excluding body content).",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN",
+    "description": "Creates a new Google Docs document, optionally initializing it with a title and content provided as Markdown text.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_FOOTER",
+    "description": "Tool to create a new footer in a Google Document. Use when you need to add a footer, optionally specifying its type and the section it applies to.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_FOOTNOTE",
+    "description": "Tool to create a new footnote in a Google Document. Use this when you need to add a footnote at a specific location or at the end of the document body.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_HEADER",
+    "description": "Tool to create a new header in a Google Document, optionally with text content. Use this tool when you need to add a header to a document. You can provide: - document_id: The ID of the document (required) - type: The header type (DEFAULT is the standard header) - text: Optional text content to add to the header - section_break_location: Optional location for section-specific headers",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_NAMED_RANGE",
+    "description": "Tool to create a new named range in a Google Document. Use this to assign a name to a specific part of the document for easier reference or programmatic manipulation.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS",
+    "description": "Tool to add bullets to paragraphs within a specified range in a Google Document. Use when you need to format a list or a set of paragraphs as bullet points.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_CONTENT_RANGE",
+    "description": "Tool to delete a range of content from a Google Document. Use when you need to remove a specific portion of text or other structural elements within a document. Note: Every segment (body, header, footer, footnote) in Google Docs ends with a final newline character that cannot be deleted. Ensure the endIndex does not include this trailing newline.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_FOOTER",
+    "description": "Tool to delete a footer from a Google Document. Use when you need to remove a footer from a specific section or the default footer.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_HEADER",
+    "description": "Deletes the header from the specified section or the default header if no section is specified. Use this tool to remove a header from a Google Document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_NAMED_RANGE",
+    "description": "Tool to delete a named range from a Google Document. Use when you need to remove a previously defined named range by its ID or name.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_PARAGRAPH_BULLETS",
+    "description": "Tool to remove bullets from paragraphs within a specified range in a Google Document. Use when you need to clear bullet formatting from a section of a document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_TABLE_COLUMN",
+    "description": "Tool to delete a column from a table in a Google Document. Use this tool when you need to remove a specific column from an existing table within a document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_DELETE_TABLE_ROW",
+    "description": "Tool to delete a row from a table in a Google Document. Use when you need to remove a specific row from an existing table.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_EXPORT_DOCUMENT_AS_PDF",
+    "description": "Tool to export a Google Docs file as PDF using the Google Drive API. Use when you need to generate a PDF version of a Google Docs document for download or distribution. Note: Google Drive enforces a 10MB limit on export content.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_GET_DOCUMENT_BY_ID",
+    "description": "Retrieves an existing Google Document by its ID; will error if the document is not found.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+    "description": "Retrieve a Google Doc by ID and return a best-effort plain-text rendering. Converts document structure into plain text including paragraphs, lists, and tables without requiring clients to traverse complex Docs API JSON.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_INSERT_INLINE_IMAGE",
+    "description": "Tool to insert an image from a given URI at a specified location in a Google Document as an inline image. Use when you need to add an image to a document programmatically.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_INSERT_PAGE_BREAK",
+    "description": "Tool to insert a page break into a Google Document. Use when you need to start new content on a fresh page, such as at the end of a chapter or section.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_INSERT_TABLE_ACTION",
+    "description": "Tool to insert a table into a Google Document. Use when you need to add a new table at a specific location or at the end of a segment (like document body, header, or footer) in a document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_INSERT_TABLE_COLUMN",
+    "description": "Tool to insert a new column into a table in a Google Document. Use this tool when you need to add a column to an existing table at a specific location.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_INSERT_TEXT_ACTION",
+    "description": "Tool to insert a string of text at a specified location within a Google Document. Use when you need to add new text content to an existing document. IMPORTANT: Two ways to specify insertion location: 1. Use 'insertion_index' to insert at a specific position (index 1 is safe for document start) 2. Use 'append_to_end=true' to append text to the end of the document (recommended for appending) CRITICAL CONSTRAINT: When using insertion_index, the index MUST fall within the bounds of an EXISTING paragraph. You cannot insert text at arbitrary indices or at structural boundaries (e.g., table starts). The index must also be strictly less than the document's end index. To safely append text without index concerns, use append_to_end=true.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_LIST_SPREADSHEET_CHARTS",
+    "description": "Tool to retrieve a list of all charts from a specified Google Sheets spreadsheet. Use when you need to get chart IDs and their specifications for embedding or referencing elsewhere, such as in Google Docs.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_REPLACE_ALL_TEXT",
+    "description": "Tool to replace all occurrences of a specified text string with another text string throughout a Google Document. Use when you need to perform a global find and replace operation within a document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_REPLACE_IMAGE",
+    "description": "Tool to replace a specific image in a document with a new image from a URI. Use when you need to update an existing image within a Google Doc.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_SEARCH_DOCUMENTS",
+    "description": "Search for Google Documents using various filters including name, content, date ranges, and more.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_UNMERGE_TABLE_CELLS",
+    "description": "Tool to unmerge previously merged cells in a table. Use this when you need to revert merged cells in a Google Document table back to their individual cell states.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_UPDATE_DOCUMENT_MARKDOWN",
+    "description": "Replaces the entire content of an existing Google Docs document with new Markdown text; requires edit permissions for the document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_UPDATE_DOCUMENT_SECTION_MARKDOWN",
+    "description": "Tool to insert or replace a section of a Google Docs document with Markdown content. Use when you need to update only a section of a document by specifying start and optional end indices. Supports full Markdown formatting.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_UPDATE_DOCUMENT_STYLE",
+    "description": "Tool to update the overall document style, such as page size, margins, and default text direction. Use when you need to modify the global style settings of a Google Document.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_UPDATE_EXISTING_DOCUMENT",
+    "description": "Applies programmatic edits, such as text insertion, deletion, or formatting, to a specified Google Doc using the `batchUpdate` API method.",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "GOOGLEDOCS_UPDATE_TABLE_ROW_STYLE",
+    "description": "Tool to update the style of a table row in a Goog",
+    "server": "GoogleDocs"
+  },
+  {
+    "tool_name": "notion_create_comment",
+    "description": "Add a comment to a page or specific content.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_create_database",
+    "description": "Create a new Notion database using SQL DDL syntax.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_create_pages",
+    "description": "Create one or more Notion pages with properties and content.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_create_view",
+    "description": "Create a new view on a Notion database.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_duplicate_page",
+    "description": "Duplicate a Notion page.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_fetch",
+    "description": "Fetch details about a Notion page, database, or data source by URL or ID.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_get_comments",
+    "description": "Get comments and discussions from a Notion page.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_get_teams",
+    "description": "List teams (teamspaces) in the current Notion workspace.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_get_users",
+    "description": "List users in the current Notion workspace.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_move_pages",
+    "description": "Move one or more Notion pages or databases to a new parent.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_search",
+    "description": "Search across a Notion workspace, connected sources, or users.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_update_data_source",
+    "description": "Update a Notion data source schema, title, or attributes using SQL DDL.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_update_page",
+    "description": "Update a Notion page's properties or content.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_update_view",
+    "description": "Update a Notion view's name, filters, sorts, or display configuration.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "firecrawl_interact",
+    "description": "Interact with a live Firecrawl browser session.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_interact_stop",
+    "description": "Stop an active Firecrawl interaction session.",
+    "server": "Firecrawl"
+  }
+]
