@@ -1,0 +1,587 @@
+[
+  {
+    "id": "R3S1",
+    "difficulty": "simple",
+    "query": "Get the current Hacker News frontpage posts with at least 100 points. Return the titles and point counts of the top 5.",
+    "expected_servers": ["HackerNews"],
+    "expected_tools": ["get_hacker_news_frontpage"],
+    "success_criteria": "Returns 5 HN post titles with point counts",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S2",
+    "difficulty": "simple",
+    "query": "Get all teams in my Linear workspace and list their names.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["get_teams"],
+    "success_criteria": "Returns list of Linear team names",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S3",
+    "difficulty": "simple",
+    "query": "List all available contact stages in our Apollo account.",
+    "expected_servers": ["Apollo"],
+    "expected_tools": ["list_apollo_contact_stages"],
+    "success_criteria": "Returns Apollo contact stage names and IDs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S4",
+    "difficulty": "simple",
+    "query": "Search for Google Spreadsheets with 'benchmark' in the name.",
+    "expected_servers": ["GoogleSheets"],
+    "expected_tools": ["search_spreadsheets"],
+    "success_criteria": "Returns matching spreadsheet names/IDs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S5",
+    "difficulty": "simple",
+    "query": "Create a SQLite table called 'benchmarks' with columns: id INTEGER PRIMARY KEY, name TEXT, score REAL, created_at TEXT. Then list all tables to confirm it was created.",
+    "expected_servers": ["SqLite"],
+    "expected_tools": ["query", "list_tables"],
+    "success_criteria": "Table 'benchmarks' created and visible in table list",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["benchmarks"]}
+  },
+  {
+    "id": "R3S6",
+    "difficulty": "simple",
+    "query": "Write a JSON file called config.json with this content: {\"app\": \"bifrost\", \"version\": \"3.0\", \"debug\": false, \"port\": 8080}",
+    "expected_servers": ["FileSystem"],
+    "expected_tools": ["write_file"],
+    "success_criteria": "File config.json created with correct JSON content",
+    "side_effects": {"files": ["config.json"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S7",
+    "difficulty": "simple",
+    "query": "Search the web for 'Bifrost AI gateway' and give me a one-sentence summary of what it is.",
+    "expected_servers": ["Tavily"],
+    "expected_tools": ["tavily_search"],
+    "success_criteria": "Returns a brief description of Bifrost",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S8",
+    "difficulty": "simple",
+    "query": "Search GitHub repositories matching 'mcp-server-sqlite'. Return the top 3 results with their names, stars, and descriptions.",
+    "expected_servers": ["Github"],
+    "expected_tools": ["search_repositories"],
+    "success_criteria": "Returns GitHub repos matching the search",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S9",
+    "difficulty": "simple",
+    "query": "Search Notion for pages containing 'meeting'. Return the page titles.",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion_search"],
+    "success_criteria": "Returns matching Notion page titles",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S10",
+    "difficulty": "simple",
+    "query": "List all calendars in my Google Calendar account. Return their names and IDs.",
+    "expected_servers": ["GoogleCalendar"],
+    "expected_tools": ["GOOGLECALENDAR_LIST_CALENDARS"],
+    "success_criteria": "Returns list of Google Calendar names and IDs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S11",
+    "difficulty": "simple",
+    "query": "Get the upcoming events from my primary Google Calendar for the next 7 days.",
+    "expected_servers": ["GoogleCalendar"],
+    "expected_tools": ["GOOGLECALENDAR_EVENTS_LIST"],
+    "success_criteria": "Returns upcoming calendar events with titles and times",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S12",
+    "difficulty": "simple",
+    "query": "Get the current date and time from Google Calendar.",
+    "expected_servers": ["GoogleCalendar"],
+    "expected_tools": ["GOOGLECALENDAR_GET_CURRENT_DATE_TIME"],
+    "success_criteria": "Returns current date/time",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S13",
+    "difficulty": "simple",
+    "query": "Search my Google Drive for files with 'report' in the name. Return the file names, types, and IDs.",
+    "expected_servers": ["GoogleDrive"],
+    "expected_tools": ["GOOGLEDRIVE_FIND_FILE"],
+    "success_criteria": "Returns matching Drive files with metadata",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S14",
+    "difficulty": "simple",
+    "query": "Create a new folder called 'MCP Benchmark R3' in my Google Drive.",
+    "expected_servers": ["GoogleDrive"],
+    "expected_tools": ["GOOGLEDRIVE_CREATE_FOLDER"],
+    "success_criteria": "Folder created, returns folder ID",
+    "side_effects": {"files": [], "directories": [], "google_drive_folders": ["MCP Benchmark R3"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S15",
+    "difficulty": "simple",
+    "query": "Get information about my Google Drive storage — how much space is used and available.",
+    "expected_servers": ["GoogleDrive"],
+    "expected_tools": ["GOOGLEDRIVE_GET_ABOUT"],
+    "success_criteria": "Returns Drive storage usage info",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S16",
+    "difficulty": "simple",
+    "query": "Create a new Google Doc titled 'R3 Benchmark Notes' with the text 'Round 3 benchmark testing with 16 MCP servers and 500+ tools.'",
+    "expected_servers": ["GoogleDocs"],
+    "expected_tools": ["GOOGLEDOCS_CREATE_DOCUMENT"],
+    "success_criteria": "Google Doc created with specified title and content",
+    "side_effects": {"files": [], "directories": [], "google_docs": ["R3 Benchmark Notes"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S17",
+    "difficulty": "simple",
+    "query": "Search Google Docs for documents with 'benchmark' in the name.",
+    "expected_servers": ["GoogleDocs"],
+    "expected_tools": ["GOOGLEDOCS_SEARCH_DOCUMENTS"],
+    "success_criteria": "Returns matching Google Docs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S18",
+    "difficulty": "simple",
+    "query": "Get my current Calendly user profile information.",
+    "expected_servers": ["Calendly"],
+    "expected_tools": ["CALENDLY_GET_USER"],
+    "success_criteria": "Returns Calendly user profile with name, email, scheduling URL",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S19",
+    "difficulty": "simple",
+    "query": "List all event types configured in my Calendly account.",
+    "expected_servers": ["Calendly"],
+    "expected_tools": ["CALENDLY_LIST_EVENT_TYPES"],
+    "success_criteria": "Returns Calendly event types with names and durations",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S20",
+    "difficulty": "simple",
+    "query": "List my upcoming scheduled Calendly events.",
+    "expected_servers": ["Calendly"],
+    "expected_tools": ["CALENDLY_LIST_SCHEDULED_EVENTS"],
+    "success_criteria": "Returns upcoming Calendly events",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S21",
+    "difficulty": "simple",
+    "query": "Get metadata for the Figma file with key 'T3lhb4UthzEXNtMySEySWZ'. Return the file name and last modified date.",
+    "expected_servers": ["Figma"],
+    "expected_tools": ["FIGMA_GET_FILE_METADATA"],
+    "success_criteria": "Returns Figma file name and last modified timestamp",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S22",
+    "difficulty": "simple",
+    "query": "Get the current authenticated Figma user's profile information.",
+    "expected_servers": ["Figma"],
+    "expected_tools": ["FIGMA_GET_CURRENT_USER"],
+    "success_criteria": "Returns Figma user profile with name and email",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S23",
+    "difficulty": "simple",
+    "query": "Get all comments on the Figma file with key 'T3lhb4UthzEXNtMySEySWZ'.",
+    "expected_servers": ["Figma"],
+    "expected_tools": ["FIGMA_GET_COMMENTS_IN_A_FILE"],
+    "success_criteria": "Returns comments with author and message content",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S24",
+    "difficulty": "simple",
+    "query": "List all shared drives in my Google Drive account.",
+    "expected_servers": ["GoogleDrive"],
+    "expected_tools": ["GOOGLEDRIVE_LIST_SHARED_DRIVES"],
+    "success_criteria": "Returns list of shared drives with names and IDs",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3S25",
+    "difficulty": "simple",
+    "query": "Get my Google Calendar settings.",
+    "expected_servers": ["GoogleCalendar"],
+    "expected_tools": ["GOOGLECALENDAR_SETTINGS_LIST"],
+    "success_criteria": "Returns calendar settings like timezone and locale",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M1",
+    "difficulty": "medium",
+    "query": "Get the top 5 Hacker News frontpage stories with at least 100 points, then store them in a SQLite table called 'hn_top_stories' with columns: title TEXT, points INTEGER, url TEXT.",
+    "expected_servers": ["HackerNews", "SqLite"],
+    "expected_tools": ["get_hacker_news_frontpage", "query"],
+    "success_criteria": "SQLite table created and populated with 5 HN stories",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["hn_top_stories"]}
+  },
+  {
+    "id": "R3M2",
+    "difficulty": "medium",
+    "query": "Get all teams from our Linear workspace and write them to a JSON file called linear_teams.json with each team's name and ID.",
+    "expected_servers": ["Linear", "FileSystem"],
+    "expected_tools": ["get_teams", "write_file"],
+    "success_criteria": "JSON file created with Linear teams data",
+    "side_effects": {"files": ["linear_teams.json"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M3",
+    "difficulty": "medium",
+    "query": "Search Apollo for people at the company 'Anthropic'. Return the first 5 contacts and write their names, titles, and emails to a file called apollo_anthropic.txt.",
+    "expected_servers": ["Apollo", "FileSystem"],
+    "expected_tools": ["apollo_people_search", "write_file"],
+    "success_criteria": "File created with Apollo contact data",
+    "side_effects": {"files": ["apollo_anthropic.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M4",
+    "difficulty": "medium",
+    "query": "Search the web for 'Starlark programming language' using Tavily, then save the top 3 result URLs and titles to a SQLite table called 'search_results' with columns: title TEXT, url TEXT.",
+    "expected_servers": ["Tavily", "SqLite"],
+    "expected_tools": ["tavily_search", "query"],
+    "success_criteria": "SQLite table created with search results",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["search_results"]}
+  },
+  {
+    "id": "R3M5",
+    "difficulty": "medium",
+    "query": "Search GitHub for repositories matching 'mcp-server' and store the top 5 results (name, description, stars, url) in a SQLite table called 'github_repos'.",
+    "expected_servers": ["Github", "SqLite"],
+    "expected_tools": ["search_repositories", "query"],
+    "success_criteria": "SQLite table created with GitHub repo data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["github_repos"]}
+  },
+  {
+    "id": "R3M6",
+    "difficulty": "medium",
+    "query": "Create a Google Spreadsheet titled 'HN Top Stories R3' and add a header row with columns: Title, Points, URL. Then add the top 3 Hacker News frontpage stories as rows.",
+    "expected_servers": ["GoogleSheets", "HackerNews"],
+    "expected_tools": ["create_a_google_sheet", "get_hacker_news_frontpage", "batch_update_spreadsheet"],
+    "success_criteria": "Spreadsheet created with HN story data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["HN Top Stories R3"]}
+  },
+  {
+    "id": "R3M7",
+    "difficulty": "medium",
+    "query": "Create a Notion page titled 'R3 Benchmark Notes' with the content: 'Round 3 benchmark with 500+ tools across 16 MCP servers. Testing token reduction at scale.'",
+    "expected_servers": ["Notion"],
+    "expected_tools": ["notion_create_pages"],
+    "success_criteria": "Notion page created with specified content",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["R3 Benchmark Notes"]}
+  },
+  {
+    "id": "R3M8",
+    "difficulty": "medium",
+    "query": "Create a Linear issue titled 'R3 Benchmark: Track new server coverage' with description 'Ensure all 16 MCP servers are exercised in Round 3 benchmarks.' in the first team of our workspace.",
+    "expected_servers": ["Linear"],
+    "expected_tools": ["get_teams", "create_linear_issue"],
+    "success_criteria": "Linear issue created with correct title and description",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "linear_issues": ["R3 Benchmark: Track new server coverage"]}
+  },
+  {
+    "id": "R3M9",
+    "difficulty": "medium",
+    "query": "Get my upcoming Google Calendar events for the next 7 days and write them to a file called calendar_events.txt with the event title, start time, and end time for each.",
+    "expected_servers": ["GoogleCalendar", "FileSystem"],
+    "expected_tools": ["GOOGLECALENDAR_EVENTS_LIST", "write_file"],
+    "success_criteria": "File created with calendar event details",
+    "side_effects": {"files": ["calendar_events.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M10",
+    "difficulty": "medium",
+    "query": "Create a quick event on my primary Google Calendar with the text 'Team standup tomorrow at 10am' using the quick add feature, then list events for that day to confirm it was added.",
+    "expected_servers": ["GoogleCalendar"],
+    "expected_tools": ["GOOGLECALENDAR_QUICK_ADD", "GOOGLECALENDAR_EVENTS_LIST"],
+    "success_criteria": "Event created via quick add and confirmed in event list",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "calendar_events": ["Team standup"]}
+  },
+  {
+    "id": "R3M11",
+    "difficulty": "medium",
+    "query": "Search my Google Drive for files with 'report' in the name, then write the file names, types, and last modified dates to a file called drive_reports.txt.",
+    "expected_servers": ["GoogleDrive", "FileSystem"],
+    "expected_tools": ["GOOGLEDRIVE_FIND_FILE", "write_file"],
+    "success_criteria": "File created with Drive search results",
+    "side_effects": {"files": ["drive_reports.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M12",
+    "difficulty": "medium",
+    "query": "Create a text file in Google Drive called 'benchmark_log.txt' with the content 'Round 3 benchmark started. 16 servers, 500+ tools.' Then get its file metadata to confirm it was created.",
+    "expected_servers": ["GoogleDrive"],
+    "expected_tools": ["GOOGLEDRIVE_CREATE_FILE_FROM_TEXT", "GOOGLEDRIVE_GET_FILE_METADATA"],
+    "success_criteria": "File created in Drive and metadata confirmed",
+    "side_effects": {"files": [], "directories": [], "google_drive_files": ["benchmark_log.txt"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M13",
+    "difficulty": "medium",
+    "query": "Create a Google Doc titled 'MCP Server Inventory' and insert a table with 3 rows and 2 columns listing: Row 1 headers 'Server' and 'Tool Count', Row 2 'FileSystem' and '14', Row 3 'GitHub' and '44'.",
+    "expected_servers": ["GoogleDocs"],
+    "expected_tools": ["GOOGLEDOCS_CREATE_DOCUMENT", "GOOGLEDOCS_INSERT_TABLE_ACTION", "GOOGLEDOCS_INSERT_TEXT_ACTION"],
+    "success_criteria": "Google Doc created with a formatted table",
+    "side_effects": {"files": [], "directories": [], "google_docs": ["MCP Server Inventory"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M14",
+    "difficulty": "medium",
+    "query": "Create a Google Doc titled 'HN Summary' using markdown with this content: '# Hacker News Summary\\n\\n## Top Stories\\n\\n- Story 1: placeholder\\n- Story 2: placeholder\\n\\n## Notes\\n\\nGenerated by MCP benchmark.'",
+    "expected_servers": ["GoogleDocs"],
+    "expected_tools": ["GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN"],
+    "success_criteria": "Google Doc created with markdown-formatted content",
+    "side_effects": {"files": [], "directories": [], "google_docs": ["HN Summary"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M15",
+    "difficulty": "medium",
+    "query": "Get all my Calendly event types and store them in a SQLite table called 'calendly_event_types' with columns: name TEXT, duration_minutes INTEGER, slug TEXT.",
+    "expected_servers": ["Calendly", "SqLite"],
+    "expected_tools": ["CALENDLY_LIST_EVENT_TYPES", "query"],
+    "success_criteria": "SQLite table created with Calendly event types",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["calendly_event_types"]}
+  },
+  {
+    "id": "R3M16",
+    "difficulty": "medium",
+    "query": "Get my upcoming Calendly scheduled events and write a summary to a file called calendly_upcoming.txt with each event's name, start time, and status.",
+    "expected_servers": ["Calendly", "FileSystem"],
+    "expected_tools": ["CALENDLY_LIST_SCHEDULED_EVENTS", "write_file"],
+    "success_criteria": "File created with upcoming Calendly events",
+    "side_effects": {"files": ["calendly_upcoming.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M17",
+    "difficulty": "medium",
+    "query": "Get the components from the Figma file with key 'T3lhb4UthzEXNtMySEySWZ' and write their names and IDs to a file called figma_components.txt.",
+    "expected_servers": ["Figma", "FileSystem"],
+    "expected_tools": ["FIGMA_GET_FILE_COMPONENTS", "write_file"],
+    "success_criteria": "File created with Figma component names and IDs",
+    "side_effects": {"files": ["figma_components.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M18",
+    "difficulty": "medium",
+    "query": "Get the styles from the Figma file with key 'T3lhb4UthzEXNtMySEySWZ' and store them in a SQLite table called 'figma_styles' with columns: name TEXT, style_type TEXT, key TEXT.",
+    "expected_servers": ["Figma", "SqLite"],
+    "expected_tools": ["FIGMA_GET_FILE_STYLES", "query"],
+    "success_criteria": "SQLite table created with Figma style data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["figma_styles"]}
+  },
+  {
+    "id": "R3M19",
+    "difficulty": "medium",
+    "query": "Get the version history of the Figma file with key 'T3lhb4UthzEXNtMySEySWZ' and write the last 5 versions (user, timestamp, label if any) to a file called figma_versions.txt.",
+    "expected_servers": ["Figma", "FileSystem"],
+    "expected_tools": ["FIGMA_GET_VERSIONS_OF_A_FILE", "write_file"],
+    "success_criteria": "File created with Figma version history",
+    "side_effects": {"files": ["figma_versions.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M20",
+    "difficulty": "medium",
+    "query": "Get my Google Calendar events for the next 7 days and store them in a SQLite table called 'calendar_events' with columns: title TEXT, start_time TEXT, end_time TEXT, location TEXT.",
+    "expected_servers": ["GoogleCalendar", "SqLite"],
+    "expected_tools": ["GOOGLECALENDAR_EVENTS_LIST", "query"],
+    "success_criteria": "SQLite table created with calendar event data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["calendar_events"]}
+  },
+  {
+    "id": "R3M21",
+    "difficulty": "medium",
+    "query": "Search Google Drive for all PDF files, then write a list of their names and file sizes to a file called drive_pdfs.txt.",
+    "expected_servers": ["GoogleDrive", "FileSystem"],
+    "expected_tools": ["GOOGLEDRIVE_FIND_FILE", "write_file"],
+    "success_criteria": "File created listing PDF files from Drive",
+    "side_effects": {"files": ["drive_pdfs.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M22",
+    "difficulty": "medium",
+    "query": "Get the plain text content of the Google Doc titled 'R3 Benchmark Notes' and save it to a local file called gdoc_export.txt.",
+    "expected_servers": ["GoogleDocs", "FileSystem"],
+    "expected_tools": ["GOOGLEDOCS_SEARCH_DOCUMENTS", "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT", "write_file"],
+    "success_criteria": "Local file created with Google Doc content",
+    "side_effects": {"files": ["gdoc_export.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M23",
+    "difficulty": "medium",
+    "query": "Get my Calendly user profile and my Figma user profile, then write a combined profile summary to a file called profiles.txt with name and email from each service.",
+    "expected_servers": ["Calendly", "Figma", "FileSystem"],
+    "expected_tools": ["CALENDLY_GET_USER", "FIGMA_GET_CURRENT_USER", "write_file"],
+    "success_criteria": "File created with combined Calendly + Figma profiles",
+    "side_effects": {"files": ["profiles.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M24",
+    "difficulty": "medium",
+    "query": "Get the top 3 Hacker News frontpage stories and create a Google Doc titled 'HN Digest' with the story titles, points, and URLs formatted as a bulleted list.",
+    "expected_servers": ["HackerNews", "GoogleDocs"],
+    "expected_tools": ["get_hacker_news_frontpage", "GOOGLEDOCS_CREATE_DOCUMENT", "GOOGLEDOCS_INSERT_TEXT_ACTION"],
+    "success_criteria": "Google Doc created with HN stories as bulleted list",
+    "side_effects": {"files": [], "directories": [], "google_docs": ["HN Digest"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M25",
+    "difficulty": "medium",
+    "query": "Get my Google Calendar events for the next 7 days and create a Google Spreadsheet titled 'Weekly Calendar Export' with columns: Event Title, Date, Start Time, End Time. Populate it with the events.",
+    "expected_servers": ["GoogleCalendar", "GoogleSheets"],
+    "expected_tools": ["GOOGLECALENDAR_EVENTS_LIST", "create_a_google_sheet", "batch_update_spreadsheet"],
+    "success_criteria": "Spreadsheet created and populated with calendar events",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["Weekly Calendar Export"]}
+  },
+  {
+    "id": "R3M26",
+    "difficulty": "medium",
+    "query": "Find free time slots on my Google Calendar for the next 3 days, then write the available slots to a file called free_slots.txt.",
+    "expected_servers": ["GoogleCalendar", "FileSystem"],
+    "expected_tools": ["GOOGLECALENDAR_FIND_FREE_SLOTS", "write_file"],
+    "success_criteria": "File created with available time slots",
+    "side_effects": {"files": ["free_slots.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M27",
+    "difficulty": "medium",
+    "query": "Create a new folder called 'Exports' in Google Drive, then create a text file inside it called 'readme.txt' with the content 'This folder contains benchmark exports.'",
+    "expected_servers": ["GoogleDrive"],
+    "expected_tools": ["GOOGLEDRIVE_CREATE_FOLDER", "GOOGLEDRIVE_CREATE_FILE_FROM_TEXT"],
+    "success_criteria": "Folder and file created in Drive",
+    "side_effects": {"files": [], "directories": [], "google_drive_folders": ["Exports"], "google_drive_files": ["readme.txt"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M28",
+    "difficulty": "medium",
+    "query": "Get the Figma file components for file key 'T3lhb4UthzEXNtMySEySWZ' and create a Google Spreadsheet titled 'Figma Components' with columns: Component Name, Component ID. Populate with the results.",
+    "expected_servers": ["Figma", "GoogleSheets"],
+    "expected_tools": ["FIGMA_GET_FILE_COMPONENTS", "create_a_google_sheet", "batch_update_spreadsheet"],
+    "success_criteria": "Spreadsheet created with Figma component data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "google_sheets": ["Figma Components"]}
+  },
+  {
+    "id": "R3M29",
+    "difficulty": "medium",
+    "query": "Get all Calendly event types and all Linear teams, then create a SQLite table called 'service_inventory' with columns: service TEXT, item_name TEXT, item_type TEXT. Insert each Calendly event type as ('Calendly', name, 'event_type') and each Linear team as ('Linear', name, 'team').",
+    "expected_servers": ["Calendly", "Linear", "SqLite"],
+    "expected_tools": ["CALENDLY_LIST_EVENT_TYPES", "get_teams", "query"],
+    "success_criteria": "SQLite table created with combined Calendly + Linear data",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["service_inventory"]}
+  },
+  {
+    "id": "R3M30",
+    "difficulty": "medium",
+    "query": "Search Apollo for organizations matching 'OpenAI', search Google Drive for files with 'openai' in the name, and write a combined report to openai_research.txt with both result sets.",
+    "expected_servers": ["Apollo", "GoogleDrive", "FileSystem"],
+    "expected_tools": ["search_organizations_in_apollo", "GOOGLEDRIVE_FIND_FILE", "write_file"],
+    "success_criteria": "File created with Apollo org data and Drive file listing",
+    "side_effects": {"files": ["openai_research.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M31",
+    "difficulty": "medium",
+    "query": "Get the list of organization memberships from my Calendly account and write them to a file called calendly_org.txt.",
+    "expected_servers": ["Calendly", "FileSystem"],
+    "expected_tools": ["CALENDLY_LIST_ORGANIZATION_MEMBERSHIPS", "write_file"],
+    "success_criteria": "File created with Calendly organization membership data",
+    "side_effects": {"files": ["calendly_org.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M32",
+    "difficulty": "medium",
+    "query": "Get my Google Calendar events for the next 7 days and my Calendly scheduled events. Write a combined schedule to a file called combined_schedule.txt showing events from both platforms sorted by date.",
+    "expected_servers": ["GoogleCalendar", "Calendly", "FileSystem"],
+    "expected_tools": ["GOOGLECALENDAR_EVENTS_LIST", "CALENDLY_LIST_SCHEDULED_EVENTS", "write_file"],
+    "success_criteria": "File created with combined Google Calendar + Calendly schedule",
+    "side_effects": {"files": ["combined_schedule.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M33",
+    "difficulty": "medium",
+    "query": "Get the comments from Figma file 'T3lhb4UthzEXNtMySEySWZ' and create a Notion page titled 'Figma Review Comments' with the comment author and message for each comment.",
+    "expected_servers": ["Figma", "Notion"],
+    "expected_tools": ["FIGMA_GET_COMMENTS_IN_A_FILE", "notion_create_pages"],
+    "success_criteria": "Notion page created with Figma comments",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": [], "notion_pages": ["Figma Review Comments"]}
+  },
+  {
+    "id": "R3M34",
+    "difficulty": "medium",
+    "query": "Search the web for 'Google Calendar API best practices' using Tavily and create a Google Doc titled 'Calendar API Notes' with the top 3 result titles and URLs as content.",
+    "expected_servers": ["Tavily", "GoogleDocs"],
+    "expected_tools": ["tavily_search", "GOOGLEDOCS_CREATE_DOCUMENT"],
+    "success_criteria": "Google Doc created with web search results",
+    "side_effects": {"files": [], "directories": [], "google_docs": ["Calendar API Notes"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M35",
+    "difficulty": "medium",
+    "query": "Search GitHub issues in the repo 'modelcontextprotocol/specification' with the keyword 'transport'. Return the first 5 issue titles and their states.",
+    "expected_servers": ["Github"],
+    "expected_tools": ["search_issues"],
+    "success_criteria": "Returns GitHub issues about transport",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M36",
+    "difficulty": "medium",
+    "query": "Get the database schema from our SQLite database, then write a summary of all tables and their column definitions to a Google Doc titled 'Database Schema'.",
+    "expected_servers": ["SqLite", "GoogleDocs"],
+    "expected_tools": ["db_info", "GOOGLEDOCS_CREATE_DOCUMENT"],
+    "success_criteria": "Google Doc created with SQLite schema documentation",
+    "side_effects": {"files": [], "directories": [], "google_docs": ["Database Schema"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M37",
+    "difficulty": "medium",
+    "query": "Get the file listing of the current directory and upload it as a text file called 'workspace_snapshot.txt' to Google Drive.",
+    "expected_servers": ["FileSystem", "GoogleDrive"],
+    "expected_tools": ["list_directory", "GOOGLEDRIVE_CREATE_FILE_FROM_TEXT"],
+    "success_criteria": "Directory listing uploaded to Google Drive as text file",
+    "side_effects": {"files": [], "directories": [], "google_drive_files": ["workspace_snapshot.txt"], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M38",
+    "difficulty": "medium",
+    "query": "Get Figma file metadata for file key 'T3lhb4UthzEXNtMySEySWZ' and the Google Drive storage info. Write both to a file called platform_status.txt.",
+    "expected_servers": ["Figma", "GoogleDrive", "FileSystem"],
+    "expected_tools": ["FIGMA_GET_FILE_METADATA", "GOOGLEDRIVE_GET_ABOUT", "write_file"],
+    "success_criteria": "File created with Figma file info and Drive storage status",
+    "side_effects": {"files": ["platform_status.txt"], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "R3M39",
+    "difficulty": "medium",
+    "query": "List all Google Calendars in my account and all Calendly event types. Store both in a SQLite table called 'scheduling_tools' with columns: platform TEXT, name TEXT, type TEXT.",
+    "expected_servers": ["GoogleCalendar", "Calendly", "SqLite"],
+    "expected_tools": ["GOOGLECALENDAR_LIST_CALENDARS", "CALENDLY_LIST_EVENT_TYPES", "query"],
+    "success_criteria": "SQLite table with calendar and Calendly data combined",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": ["scheduling_tools"]}
+  },
+  {
+    "id": "R3M40",
+    "difficulty": "medium",
+    "query": "Get the Hacker News frontpage stories with 100+ points, then create a Google Drive text file called 'hn_digest.txt' with the top 5 story titles and URLs.",
+    "expected_servers": ["HackerNews", "GoogleDrive"],
+    "expected_tools": ["get_hacker_news_frontpage", "GOOGLEDRIVE_CREATE_FILE_FROM_TEXT"],
+    "success_criteria": "Google Drive text file created with HN stories",
+    "side_effects": {"files": [], "directories": [], "google_drive_files": ["hn_digest.txt"], "sqlite_tables": []}
+  }
+]

@@ -1,0 +1,1257 @@
+[
+  {
+    "tool_name": "read_file",
+    "description": "Read the complete contents of a file as text (deprecated; use read_text_file instead).",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "read_multiple_files",
+    "description": "Read the contents of multiple files simultaneously, returning each file's content keyed by its path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "write_file",
+    "description": "Create a new file or completely overwrite an existing file with new text content.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "edit_file",
+    "description": "Make line-based edits to a text file, returning a git-style diff of the changes made.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "create_directory",
+    "description": "Create a new directory (including nested directories) or silently succeed if it already exists.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "directory_tree",
+    "description": "Get a recursive JSON tree view of all files and directories under a given path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "move_file",
+    "description": "Move or rename a file or directory from a source path to a destination path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "list_allowed_directories",
+    "description": "Return the list of directories (and their subdirectories) that this server is permitted to access.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "read_text_file",
+    "description": "Read the complete text contents of a single file, with optional head/tail line limiting.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "read_media_file",
+    "description": "Read an image or audio file and return its base64-encoded data along with its MIME type.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "list_directory",
+    "description": "Get a detailed listing of all files and directories at a given path, prefixed with [FILE] or [DIR].",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "list_directory_with_sizes",
+    "description": "Get a detailed listing of all files and directories at a given path, including their sizes.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "search_files",
+    "description": "Recursively search for files and directories matching a glob-style pattern under a given path.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "get_file_info",
+    "description": "Retrieve detailed metadata (size, type, timestamps, permissions) about a file or directory.",
+    "server": "FileSystem"
+  },
+  {
+    "tool_name": "firecrawl_agent_status",
+    "description": "Check the status of an agent job and retrieve results when complete.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_browser_create",
+    "description": "Create a browser session for code execution via CDP (Chrome DevTools Protocol).",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_browser_delete",
+    "description": "Destroy a browser session.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_map",
+    "description": "Map a website to discover all indexed URLs on the site.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_crawl",
+    "description": "Starts a crawl job on a website and extracts content from all pages.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_browser_list",
+    "description": "List browser sessions, optionally filtered by status.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_scrape",
+    "description": "Scrape content from a single URL with advanced options.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_search",
+    "description": "Search the web and optionally extract content from search results.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_check_crawl_status",
+    "description": "Check the status of a crawl job.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_extract",
+    "description": "Extract structured information from web pages using LLM capabilities.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "firecrawl_agent",
+    "description": "Autonomous web research agent.",
+    "server": "Firecrawl"
+  },
+  {
+    "tool_name": "list_commits",
+    "description": "Get list of commits of a branch in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_issues",
+    "description": "List issues in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_pull_request",
+    "description": "Create a new pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "update_pull_request",
+    "description": "Update an existing pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "add_reply_to_pull_request_comment",
+    "description": "Add a reply to an existing pull request comment.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "delete_file",
+    "description": "Delete a file from a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_me",
+    "description": "Get details of the authenticated GitHub user.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_release_by_tag",
+    "description": "Get a specific release by its tag name in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_tag",
+    "description": "Get details about a specific git tag in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "request_copilot_review",
+    "description": "Request a GitHub Copilot code review for a pull request.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "run_secret_scanning",
+    "description": "Scan files, content, or recent changes for secrets such as API keys, passwords, etc.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_pull_requests",
+    "description": "Search for pull requests in GitHub repositories using issues search syntax.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "add_comment_to_pending_review",
+    "description": "Add a review comment to the requester's latest pending pull request review.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "fork_repository",
+    "description": "Fork a GitHub repository to your account or specified organization.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_commit",
+    "description": "Get details for a commit from a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_latest_release",
+    "description": "Get the latest release in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "pull_request_read",
+    "description": "Get information on a specific pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_issues",
+    "description": "Search for issues in GitHub repositories using issues search syntax.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_repositories",
+    "description": "Find GitHub repositories by name, description, readme, topics, or other metadata.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "update_pull_request_branch",
+    "description": "Update the branch of a pull request with the latest changes from the base branch.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "issue_write",
+    "description": "Create a new or update an existing issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_issue_types",
+    "description": "List supported issue types for a repository owner (organization).",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_pull_requests",
+    "description": "List pull requests in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "merge_pull_request",
+    "description": "Merge a pull request in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "pull_request_review_write",
+    "description": "Create and/or submit or delete a review of a pull request.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "push_files",
+    "description": "Push multiple files to a GitHub repository in a single commit.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "sub_issue_write",
+    "description": "Add a sub-issue to a parent issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_or_update_file",
+    "description": "Create or update a single file in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_pull_request_with_copilot",
+    "description": "Delegate a task to GitHub Copilot coding agent to perform in the background.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_copilot_job_status",
+    "description": "Get the status of a GitHub Copilot coding agent job.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_file_contents",
+    "description": "Get the contents of a file or directory from a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_label",
+    "description": "Get a specific label from a repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_teams",
+    "description": "Get details of the teams the user is a member of.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_branches",
+    "description": "List branches in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "add_issue_comment",
+    "description": "Add a comment to a specific issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_repository",
+    "description": "Create a new GitHub repository in your account or specified organization.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "issue_read",
+    "description": "Get information about a specific issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_code",
+    "description": "Fast and precise code search across all GitHub repositories using GitHub's native search.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "assign_copilot_to_issue",
+    "description": "Assign Copilot to a specific issue in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "create_branch",
+    "description": "Create a new branch in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "get_team_members",
+    "description": "Get member usernames of a specific team in an organization.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_releases",
+    "description": "List releases in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "list_tags",
+    "description": "List git tags in a GitHub repository.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "search_users",
+    "description": "Find GitHub users by username, real name, or other profile information.",
+    "server": "GitHub"
+  },
+  {
+    "tool_name": "browser_console_messages",
+    "description": "Returns all console messages from the browser.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_fill_form",
+    "description": "Fill multiple form fields at once.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_network_requests",
+    "description": "Returns all network requests made since loading the page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_select_option",
+    "description": "Select an option in a dropdown element.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_navigate",
+    "description": "Navigate the browser to a specified URL.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_navigate_back",
+    "description": "Go back to the previous page in the browser history.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_close",
+    "description": "Close the current browser page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_handle_dialog",
+    "description": "Accept or dismiss a browser dialog (alert/confirm/prompt).",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_press_key",
+    "description": "Press a key on the keyboard.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_snapshot",
+    "description": "Capture an accessibility snapshot of the current page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_tabs",
+    "description": "List, create, close, or select a browser tab.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_wait_for",
+    "description": "Wait for text to appear or disappear, or for a specified time to pass.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_take_screenshot",
+    "description": "Take a screenshot of the current page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_hover",
+    "description": "Hover the mouse over an element on the page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_run_code",
+    "description": "Run a Playwright code snippet directly.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_resize",
+    "description": "Resize the browser window to specified dimensions.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_evaluate",
+    "description": "Evaluate a JavaScript expression on the page or a specific element.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_file_upload",
+    "description": "Upload one or multiple files to the browser.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_install",
+    "description": "Install the browser specified in the configuration.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_type",
+    "description": "Type text into an editable element on the page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_click",
+    "description": "Perform a mouse click on an element on the web page.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "browser_drag",
+    "description": "Perform a drag-and-drop operation between two elements.",
+    "server": "Playwright"
+  },
+  {
+    "tool_name": "db_info",
+    "description": "Get information about the SQLite database including path, existence, size, and table count.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "query",
+    "description": "Execute a raw SQL query against the database with optional parameter values.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "list_tables",
+    "description": "List all user tables in the SQLite database, excluding system tables.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "get_table_schema",
+    "description": "Get the schema information for a specific table including column details.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "create_record",
+    "description": "Insert a new record into a table with specified data.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "read_records",
+    "description": "Read records from a table with optional conditions, limit, and offset.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "update_records",
+    "description": "Update records in a table based on specified conditions.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "delete_records",
+    "description": "Delete records from a table based on specified conditions.",
+    "server": "SQLite"
+  },
+  {
+    "tool_name": "tavily_research",
+    "description": "Perform comprehensive research on a given topic or question.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_search",
+    "description": "Search the web for current information on any topic.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_extract",
+    "description": "Extract content from URLs.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_crawl",
+    "description": "Crawl a website starting from a URL.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "tavily_map",
+    "description": "Map a website's structure.",
+    "server": "Tavily"
+  },
+  {
+    "tool_name": "create_attachment",
+    "description": "Creates a new attachment and associates it with a specific, existing Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "add_reaction_to_comment",
+    "description": "Add a reaction to an existing Linear comment.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_comment",
+    "description": "Creates a new comment on a specified Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_linear_issue",
+    "description": "Creates a new issue in a specified Linear project and team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_issue_relation",
+    "description": "Create a relationship between two Linear issues (blocks, duplicate, related).",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_label",
+    "description": "Creates a new label in Linear for a specified team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "create_project",
+    "description": "Creates a new Linear project with specified name and team associations.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "delete_issue",
+    "description": "Archives an existing Linear issue by its ID.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "download_issue_attachments",
+    "description": "Downloads a specific attachment from a Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_current_user",
+    "description": "Gets the currently authenticated user's ID, name, email, and profile information.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_cycles_by_team_id",
+    "description": "Retrieves all cycles for a specified Linear team ID.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_create_issue_default_params",
+    "description": "Fetches a Linear team's default issue estimate and state.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_linear_issue",
+    "description": "Retrieves an existing Linear issue's comprehensive details.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_linear_project",
+    "description": "Retrieves a single Linear project by its unique identifier.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_issue_drafts",
+    "description": "List issue drafts for review or further editing.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_issues_by_team_id",
+    "description": "List all issues for a specific Linear team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_all_cycles",
+    "description": "Retrieves all cycles (sprint iterations) org-wide from Linear.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_issues",
+    "description": "Lists non-archived Linear issues with optional filters.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_labels",
+    "description": "Retrieves labels from Linear, optionally filtered by team.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_projects",
+    "description": "Retrieves all projects from the Linear account.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_states",
+    "description": "Retrieves all workflow states for a specified team in Linear.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "get_teams",
+    "description": "Retrieves all teams with their members and projects.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "list_linear_users",
+    "description": "Lists all workspace users with IDs, names, emails, and active status.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "remove_label_from_issue",
+    "description": "Removes a specified label from an existing Linear issue.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "remove_reaction_from_comment",
+    "description": "Remove a reaction on a comment.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "run_query_or_mutation",
+    "description": "Execute any GraphQL query or mutation against Linear's API.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "search_linear_issues",
+    "description": "Search Linear issues using full-text search across identifier, title, and description.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "update_issue",
+    "description": "Updates an existing Linear issue using its issue_id.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "update_comment",
+    "description": "Update an existing Linear comment's body text.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "update_project",
+    "description": "Update an existing Linear project's properties.",
+    "server": "Linear"
+  },
+  {
+    "tool_name": "add_contacts_to_sequence",
+    "description": "Adds contacts to a specified Apollo email sequence.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_organization_enrichment",
+    "description": "Enriches data for up to 10 organizations simultaneously by domain.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_people_enrichment",
+    "description": "Enrich multiple person profiles simultaneously from Apollo's database.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_update_account_stage",
+    "description": "Bulk updates the stage for specified existing Apollo accounts.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_account",
+    "description": "Creates a new account in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_create_apollo_accounts",
+    "description": "Creates multiple accounts in Apollo.io with a single API call.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_create_apollo_contacts",
+    "description": "Bulk create multiple contacts in Apollo with a single API call.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_call_record",
+    "description": "Log call records in Apollo from external systems.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_contact",
+    "description": "Creates a new contact in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_custom_field",
+    "description": "Creates a new custom field in Apollo.io for contacts, accounts, or opportunities.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_deal",
+    "description": "Creates a new sales opportunity (deal) in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "create_apollo_task",
+    "description": "Create a single task in Apollo.io for a specific contact.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_account_by_id",
+    "description": "Retrieve detailed information about a specific account by its Apollo ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "check_api_key_status",
+    "description": "Check whether the provided Apollo API key is valid.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_apollo_contact",
+    "description": "Retrieves detailed information about a specific contact by its ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_apollo_deal",
+    "description": "Retrieves information about a specific deal by its ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_apollo_labels",
+    "description": "Retrieves all labels from Apollo.io for organizing contacts and accounts.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_opportunity_stages",
+    "description": "Retrieves all configured opportunity (deal) stages from Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_organization_by_id",
+    "description": "Retrieves complete information about a specific organization by its Apollo ID.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_organization_job_postings",
+    "description": "Retrieves paginated job postings for a specified organization.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_typed_custom_fields",
+    "description": "Retrieves all typed custom field definitions available in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_account_stages",
+    "description": "Retrieves the IDs for all available account stages in Apollo.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_contact_stages",
+    "description": "Retrieves all available contact stages from an Apollo account.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_apollo_deals",
+    "description": "Retrieves a list of deals from Apollo.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_email_accounts",
+    "description": "Retrieves all email accounts and their details for the authenticated user.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_fields",
+    "description": "Retrieves all field definitions from Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "list_apollo_users",
+    "description": "Retrieves a list of all users associated with the Apollo account.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "enrich_organization",
+    "description": "Fetches comprehensive organization enrichment data from Apollo.io for a domain.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_organizations",
+    "description": "Searches Apollo's database for organizations using various filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "enrich_person",
+    "description": "Enriches and retrieves information for a person from Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "people_search",
+    "description": "Searches Apollo's contact database for people using various filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_apollo_accounts",
+    "description": "Searches for accounts within your existing Apollo.io database.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_calls",
+    "description": "Searches for call records in Apollo.io using filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_apollo_contacts",
+    "description": "Searches Apollo contacts using keywords, stage IDs, or sorting.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_news_articles",
+    "description": "Search for news articles about companies in Apollo's database.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_outreach_emails",
+    "description": "Search for outreach emails sent through Apollo sequences.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_sequences",
+    "description": "Searches for sequences (automated email campaigns) in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "search_tasks",
+    "description": "Searches for tasks in Apollo.io using filters.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_apollo_account",
+    "description": "Updates specified attributes of an existing account in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_account_ownership",
+    "description": "Updates the ownership of multiple Apollo accounts to a specified user.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_call_record",
+    "description": "Update an existing call record in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_apollo_contact",
+    "description": "Update an existing contact's information in Apollo.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_contact_ownership",
+    "description": "Updates the ownership of specified Apollo contacts to a given user.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "bulk_update_apollo_contacts",
+    "description": "Bulk update multiple Apollo contacts with a single API call.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_contact_stage",
+    "description": "Updates the stage for one or more existing contacts in Apollo.io.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_contact_status_in_sequence",
+    "description": "Updates a contact's status within a designated Apollo sequence.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "update_apollo_deal",
+    "description": "Updates specified fields of an existing Apollo.io deal.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "view_api_usage_stats",
+    "description": "Fetches Apollo API usage statistics and rate limits.",
+    "server": "Apollo"
+  },
+  {
+    "tool_name": "get_ask_hn_story_ids",
+    "description": "Get up to 200 latest Ask HN story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_best_stories",
+    "description": "Get up to 500 best story IDs from HackerNews ranked by score.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_frontpage",
+    "description": "Retrieve current Hacker News frontpage posts filtered by minimum points.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_item",
+    "description": "Get a Hacker News item by its unique ID from the Firebase API.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_item_v2",
+    "description": "Get a specific item from Hacker News using its ID with limited response size.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_job_story_ids",
+    "description": "Get up to 200 latest job story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_latest_posts",
+    "description": "Get the latest posts from Hacker News based on optional filters.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_max_item_id",
+    "description": "Get the current largest item ID from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_new_stories",
+    "description": "Get up to 500 newest story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_show_hn_stories",
+    "description": "Retrieve up to 200 latest Show HN story IDs from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_today_posts",
+    "description": "Retrieves today's Hacker News posts filtered by minimum upvotes.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_top_stories",
+    "description": "Get up to 500 top story IDs from HackerNews including jobs.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_updates",
+    "description": "Get recently changed items and user profiles from Hacker News.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_user",
+    "description": "Retrieve a Hacker News user's public profile by their username.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "get_hn_user_by_username",
+    "description": "Get a user profile by case-sensitive username from the HackerNews Firebase API.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "search_hn_posts",
+    "description": "Search Hacker News posts using full-text search powered by Algolia.",
+    "server": "HackerNews"
+  },
+  {
+    "tool_name": "add_sheet",
+    "description": "Adds a new sheet to a spreadsheet. Supports GRID, OBJECT, and DATA_SOURCE types.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "aggregate_column_data",
+    "description": "Searches for rows where a column matches a value and performs operations on another column.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "append_dimension",
+    "description": "Append new rows or columns to a sheet, increasing its size.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_clear_values_by_data_filter",
+    "description": "Clears ranges of values from a spreadsheet using data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_get_spreadsheet",
+    "description": "Retrieves data from specified cell ranges in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_update_spreadsheet",
+    "description": "Write values to a range in a Google Sheet, or append as new rows.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_update_values_by_data_filter",
+    "description": "Update values in ranges matching data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "clear_basic_filter",
+    "description": "Clear the basic filter from a sheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "clear_spreadsheet_values",
+    "description": "Clears cell content from a specified range, preserving formatting.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_chart",
+    "description": "Create a chart in a Google Sheets spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_spreadsheet",
+    "description": "Creates a new Google Spreadsheet in Google Drive.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_spreadsheet_column",
+    "description": "Creates a new column in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "create_spreadsheet_row",
+    "description": "Inserts a new empty row into a specified sheet at a given index.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "delete_dimension",
+    "description": "Delete specified rows or columns from a sheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "delete_sheet",
+    "description": "Delete a sheet (worksheet) from a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "find_and_replace",
+    "description": "Find and replace text in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "format_cell",
+    "description": "Applies text and background cell formatting to a specified range.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_conditional_format_rules",
+    "description": "List conditional formatting rules for sheets.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_data_validation_rules",
+    "description": "Extract data validation rules from a Google Sheets spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_sheet_names",
+    "description": "Lists all worksheet names from a specified Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_spreadsheet_by_data_filter",
+    "description": "Returns spreadsheet data filtered by specified data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_spreadsheet_info",
+    "description": "Retrieves comprehensive metadata for a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "insert_dimension",
+    "description": "Insert new rows or columns into a sheet at a specified location.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "look_up_spreadsheet_row",
+    "description": "Finds the first row where a cell exactly matches the query string.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "mutate_conditional_format_rules",
+    "description": "Add, update, delete, or reorder conditional format rules.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "search_developer_metadata",
+    "description": "Search for developer metadata in a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "search_spreadsheets",
+    "description": "Search for Google Spreadsheets using various filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "set_basic_filter",
+    "description": "Set a basic filter on a sheet in a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "set_data_validation_rule",
+    "description": "Set or clear data validation rules on a range in Google Sheets.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "copy_sheet_to_another",
+    "description": "Copy a single sheet from a spreadsheet to another spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "append_values",
+    "description": "Append values to the end of an existing table in a Google Sheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_clear_values",
+    "description": "Clear one or more ranges of values from a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_get_values_by_data_filter",
+    "description": "Return ranges of values matching specified data filters.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "update_sheet_properties",
+    "description": "Update properties of a sheet within a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "update_spreadsheet_properties",
+    "description": "Update spreadsheet-level properties like title, locale, time zone.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "batch_update_values",
+    "description": "Set values in one or more ranges of a spreadsheet in a single operation.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "upsert_rows",
+    "description": "Upsert rows - update existing rows by key, append new ones.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "get_spreadsheet_values",
+    "description": "Returns a range of values from a spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "update_spreadsheet_values",
+    "description": "Set values in a range of a Google Spreadsheet.",
+    "server": "GoogleSheets"
+  },
+  {
+    "tool_name": "notion_create_comment",
+    "description": "Add a comment to a page or specific content.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_create_database",
+    "description": "Create a new Notion database using SQL DDL syntax.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_create_pages",
+    "description": "Create one or more Notion pages with properties and content.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_create_view",
+    "description": "Create a new view on a Notion database.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_duplicate_page",
+    "description": "Duplicate a Notion page.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_fetch",
+    "description": "Fetch details about a Notion page, database, or data source by URL or ID.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_get_comments",
+    "description": "Get comments and discussions from a Notion page.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_get_teams",
+    "description": "List teams (teamspaces) in the current Notion workspace.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_get_users",
+    "description": "List users in the current Notion workspace.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_move_pages",
+    "description": "Move one or more Notion pages or databases to a new parent.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_search",
+    "description": "Search across a Notion workspace, connected sources, or users.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_update_data_source",
+    "description": "Update a Notion data source schema, title, or attributes using SQL DDL.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_update_page",
+    "description": "Update a Notion page's properties or content.",
+    "server": "Notion"
+  },
+  {
+    "tool_name": "notion_update_view",
+    "description": "Update a Notion view's name, filters, sorts, or display configuration.",
+    "server": "Notion"
+  }
+]
