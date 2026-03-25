@@ -404,12 +404,3 @@ Each query specifies:
 └── README.md
 ```
 
-## Known Issues
-
-- **UTF-8 surrogates**: GitHub API occasionally returns content with invalid Unicode surrogate characters. Bifrost's Rust serializer rejects these when accumulating conversation history, causing `"str is not valid UTF-8: surrogates not allowed"` errors. Non-deterministic — re-running the query usually succeeds. Fix needed in Bifrost's serialization layer.
-
-- **Token inflation in Code Mode**: `executeToolCode` responses include the full raw tool output regardless of what the Starlark `print()` outputs. Large web scrapes or GitHub file contents can inflate context significantly, sometimes exceeding Code Mode OFF token usage for individual queries.
-
-- **Output token increase**: Code Mode ON uses more output tokens because the model writes Starlark code. The net savings come from input token reduction (no large tool schema per API call).
-
-- **Tool description quality**: Some MCP servers have tool descriptions that reference non-existent tools (e.g., Linear's `LINEAR_LIST_LINEAR_TEAMS` recommends using `LINEAR_GET_ALL_LINEAR_TEAMS` which doesn't exist). This causes the model to hallucinate tool calls that can't be executed.
