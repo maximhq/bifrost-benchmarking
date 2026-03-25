@@ -1,8 +1,8 @@
 # MCP Code Mode Benchmark Report
 
-**Model:** anthropic/claude-sonnet-4-6
-**Binding Level:** Tool-level
-**Token Measurement:** Cumulative across all agent loop turns
+- **Model:** anthropic/claude-sonnet-4-6
+- **Binding Level:** Tool-level
+- **Token Measurement:** Cumulative across all agent loop turns
 
 ---
 
