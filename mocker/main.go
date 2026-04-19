@@ -279,6 +279,8 @@ var (
 	failurePercent     int
 	failureJitter      int
 	tpm                int
+	tpmDuration        int
+	tpmAuthKeys        string
 	logRaw             bool
 	startTime          time.Time
 	tpmTriggeredLogged bool
@@ -296,6 +298,8 @@ func init() {
 	flag.IntVar(&failurePercent, "failure-percent", getEnvInt("MOCKER_FAILURE_PERCENT", 0), "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", getEnvInt("MOCKER_FAILURE_JITTER", 0), "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
+	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
+	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 }
 
@@ -612,19 +616,36 @@ func writeSSEDataLine(w *bufio.Writer, payload string) {
 	_ = w.Flush()
 }
 
-// shouldTriggerTPM checks if TPM (429) scenario should be triggered
-func shouldTriggerTPM() bool {
-	if tpm > 0 && !startTime.IsZero() {
-		elapsedSeconds := int(time.Since(startTime).Seconds())
-		if elapsedSeconds >= tpm {
-			if !tpmTriggeredLogged {
-				log.Printf("TPM (429) scenario triggered after %d seconds", elapsedSeconds)
-				tpmTriggeredLogged = true
+// shouldTriggerTPM checks if TPM (429) scenario should be triggered for the given auth header value.
+func shouldTriggerTPM(authHeader string) bool {
+	if tpm <= 0 || startTime.IsZero() {
+		return false
+	}
+	if tpmAuthKeys != "" {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		matched := false
+		for _, key := range strings.Split(tpmAuthKeys, ",") {
+			if strings.TrimSpace(key) == token {
+				matched = true
+				break
 			}
-			return true
+		}
+		if !matched {
+			return false
 		}
 	}
-	return false
+	elapsedSeconds := int(time.Since(startTime).Seconds())
+	if elapsedSeconds < tpm {
+		return false
+	}
+	if tpmDuration > 0 && elapsedSeconds >= tpm+tpmDuration {
+		return false
+	}
+	if !tpmTriggeredLogged {
+		log.Printf("TPM (429) scenario triggered after %d seconds", elapsedSeconds)
+		tpmTriggeredLogged = true
+	}
+	return true
 }
 
 // sendErrorResponse sends a standardized error response
@@ -901,7 +922,7 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, stream := parseModelFromRequest(ctx)
 
-	if shouldTriggerTPM() {
+	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -979,7 +1000,7 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
 
-	if shouldTriggerTPM() {
+	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1049,7 +1070,7 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
 
-	if shouldTriggerTPM() {
+	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1121,7 +1142,7 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, stream := parseAnthropicModelFromRequest(ctx)
 
-	if shouldTriggerTPM() {
+	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1185,7 +1206,7 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 	provider, model := parseGenAIModelFromPath(string(ctx.Path()))
 	isStreamPath := strings.Contains(string(ctx.Path()), ":streamGenerateContent")
 
-	if shouldTriggerTPM() {
+	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1253,7 +1274,7 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 	model, isConverse, isStream := parseBedrockModelFromPath(string(ctx.Path()))
 
-	if shouldTriggerTPM() {
+	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1407,7 +1428,14 @@ func main() {
 		log.Printf("Mock LLM server (fasthttp) starting on %s with latency %dms...\n", addr, latency)
 	}
 	if tpm > 0 {
-		log.Printf("TPM (429) scenario will be triggered after %d seconds", tpm)
+		if tpmDuration > 0 {
+			log.Printf("TPM (429) scenario will be triggered between %d and %d seconds", tpm, tpm+tpmDuration)
+		} else {
+			log.Printf("TPM (429) scenario will be triggered after %d seconds", tpm)
+		}
+		if tpmAuthKeys != "" {
+			log.Printf("TPM will only apply to requests with auth keys: %s", tpmAuthKeys)
+		}
 	}
 	log.Printf("Max request body size: 50MB")
 

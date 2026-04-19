@@ -23,7 +23,7 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Configurable Port**: Specify listening port via the `-port` flag
 - **Authentication**: Optional authentication header validation via the `-auth` flag
 - **Failure Simulation**: Configurable failure rate simulation with `-failure-percent` and `-failure-jitter` flags for testing error handling
-- **Rate Limiting Simulation**: Configurable TPM (tokens per minute) rate limit scenarios via the `-tpm` flag to simulate 429 Too Many Requests responses
+- **Rate Limiting Simulation**: Configurable TPM (tokens per minute) rate limit scenarios via the `-tpm`, `-tpm-duration`, and `-tpm-auth-keys` flags to simulate 429 Too Many Requests responses with optional time windows and per-key targeting
 - **Raw Request/Response Logging**: Optional detailed logging of raw HTTP requests and responses via the `-log-raw` flag for debugging and inspection
 
 ## Prerequisites
@@ -94,14 +94,23 @@ go run main.go -port 8080 -failure-percent 10 -failure-jitter 5
 
 ```bash
 go run main.go -port 8080 -tpm 30
-# Returns 429 responses after 30 seconds to simulate rate limits
+# Returns 429 responses after 30 seconds to simulate rate limits (stays on forever)
+
+go run main.go -port 8080 -tpm 30 -tpm-duration 60
+# Returns 429 responses only between 30s and 90s, then recovers
+
+go run main.go -port 8080 -tpm 30 -tpm-auth-keys "key-A,key-B"
+# Only key-A and key-B requests get rate-limited; all other keys are unaffected
+
+go run main.go -port 8080 -tpm 30 -tpm-duration 60 -tpm-auth-keys "Bearer key-A"
+# key-A requests are rate-limited between 30s and 90s only
 ```
 
 **Complete testing setup:**
 
 ```bash
-go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -tpm 60 -big-payload
-# Full-featured mock server with latency, jitter, auth, failure simulation, rate limiting, and large payloads
+go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -tpm 60 -tpm-duration 30 -big-payload
+# Full-featured mock server with latency, jitter, auth, failure simulation, rate limiting window, and large payloads
 ```
 
 **With raw request/response logging:**
@@ -151,7 +160,9 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_FAILURE_PERCENT`: Base failure percentage 0-100 (default: `0`)
 - `MOCKER_FAILURE_JITTER`: Maximum jitter in percentage points (default: `0`)
 - `MOCKER_WITH_ERRORS`: Enable random provider-specific errors (default: `false`)
-- `MOCKER_TPM`: Seconds after which to trigger TPM (429) scenarios (default: `0`)
+- `MOCKER_TPM`: Seconds after which to trigger TPM (429) scenarios (default: `0`, disabled)
+- `MOCKER_TPM_DURATION`: Duration in seconds for the TPM window; TPM is active from `MOCKER_TPM` to `MOCKER_TPM + MOCKER_TPM_DURATION` seconds (default: `0`, active until server stop)
+- `MOCKER_TPM_AUTH_KEYS`: Comma-separated bearer token values that trigger TPM; the `Bearer ` prefix is stripped automatically before comparison, so pass raw tokens (e.g. `key-A,key-B`); other keys are unaffected (default: `""`, all requests)
 - `MOCKER_LOG_RAW`: Log raw HTTP requests and responses - set to `true`, `1`, `false`, or `0` (default: `false`)
 
 **Example using environment variables:**
@@ -163,6 +174,8 @@ export MOCKER_JITTER=20
 export MOCKER_BIG_PAYLOAD=true
 export MOCKER_AUTH="Bearer my-secret-key"
 export MOCKER_TPM=60
+export MOCKER_TPM_DURATION=30
+export MOCKER_TPM_AUTH_KEYS="key-A,key-B"
 go run main.go
 ```
 
@@ -193,6 +206,8 @@ services:
       - MOCKER_BIG_PAYLOAD=true
       - MOCKER_AUTH=Bearer my-secret-key
       - MOCKER_TPM=60
+      - MOCKER_TPM_DURATION=30
+      - MOCKER_TPM_AUTH_KEYS=key-A,key-B
 ```
 
 #### Command-Line Flags
@@ -206,7 +221,9 @@ services:
 - `-failure-percent <percentage>`: Base failure percentage (0-100) for simulating server errors (default: `0`)
 - `-failure-jitter <percentage_points>`: Maximum jitter in percentage points to add to failure rate, creating a range of ±failure-jitter (default: `0`)
 - `-with-errors` / `-witherrors`: Enable random provider-specific error payloads/codes. Defaults to 20% error rate when enabled unless `-failure-percent` is set
-- `-tpm <seconds>`: Seconds after which to trigger TPM (429) scenarios. After this duration, all requests return HTTP 429 Too Many Requests (default: `0`, disabled)
+- `-tpm <seconds>`: Seconds after which to trigger TPM (429) scenarios (default: `0`, disabled)
+- `-tpm-duration <seconds>`: Duration in seconds for the TPM window. TPM is active from `-tpm` to `-tpm + -tpm-duration` seconds; after the window closes requests succeed again (default: `0`, active until server stop)
+- `-tpm-auth-keys <keys>`: Comma-separated bearer token values that should be rate-limited. The `Bearer ` prefix is stripped automatically before comparison, so pass the raw token (e.g. `"key-A,key-B"`). Requests with any other key are unaffected (default: `""`, all requests)
 - `-log-raw`: Log raw HTTP request and response bodies for debugging and inspection (default: `false`)
 
 **Note:** Command-line flags override environment variables. If `-auth` is set to an empty string (`-auth ""`), authentication is disabled. Otherwise, all requests must include the exact authentication header value.
@@ -405,13 +422,37 @@ Failed requests return a `500 Internal Server Error` with an OpenAI-compatible e
 
 ## Rate Limiting Simulation (TPM)
 
-The `-tpm` flag allows you to simulate rate limiting scenarios by triggering HTTP 429 (Too Many Requests) responses after a specified number of seconds:
+Three flags control TPM (429) simulation:
 
-- `-tpm`: Number of seconds before rate limiting starts (0 = disabled)
+| Flag | Env var | Default | Description |
+|------|---------|---------|-------------|
+| `-tpm <seconds>` | `MOCKER_TPM` | `0` (disabled) | Seconds after server start when rate limiting begins |
+| `-tpm-duration <seconds>` | `MOCKER_TPM_DURATION` | `0` (forever) | Duration of the rate-limit window; TPM is active from `tpm` to `tpm + tpm-duration` seconds |
+| `-tpm-auth-keys <keys>` | `MOCKER_TPM_AUTH_KEYS` | `""` (all) | Comma-separated raw bearer token values to rate-limit (`Bearer ` prefix stripped automatically); all other keys are unaffected |
 
-**Example:** With `-tpm 30`, the server will normally accept all requests, but after 30 seconds, all requests will return HTTP 429.
+**Behaviour summary:**
 
-Rate-limited requests return a `429 Too Many Requests` response with an OpenAI-compatible error response:
+- If only `-tpm` is set: all requests return 429 from that second onward.
+- If `-tpm-duration` is also set: 429s fire only inside the `[tpm, tpm+tpm-duration)` second window; requests succeed before and after.
+- If `-tpm-auth-keys` is set: only requests whose `Authorization` header exactly matches one of the listed values are rate-limited; others always succeed regardless of the time window.
+
+**Examples:**
+
+```bash
+# All requests rate-limited after 30 s
+go run main.go -tpm 30
+
+# Rate-limited only between 30 s and 90 s, then recovers
+go run main.go -tpm 30 -tpm-duration 60
+
+# Only key-A and key-B are rate-limited after 30 s
+go run main.go -tpm 30 -tpm-auth-keys "key-A,key-B"
+
+# key-A rate-limited in a 60 s window starting at 30 s; key-B and others unaffected
+go run main.go -tpm 30 -tpm-duration 60 -tpm-auth-keys "key-A"
+```
+
+Rate-limited requests return a `429 Too Many Requests` response:
 
 ```json
 {
@@ -428,6 +469,7 @@ Rate-limited requests return a `429 Too Many Requests` response with an OpenAI-c
 - Test client-side retry logic and exponential backoff handling
 - Verify that applications gracefully degrade when rate limits are encountered
 - Simulate realistic API usage patterns where limits are enforced after certain thresholds
+- Test per-key rate limiting — e.g. one API key gets throttled while others remain healthy
 - Load test rate limit handling in production-like scenarios
 
 ## Streaming Responses
@@ -571,7 +613,14 @@ Content-Type: application/json
 
 **TPM Scenario Logging:**
 
-When the TPM (rate limiting) scenario is triggered, the server logs:
+On startup, the server logs the configured TPM window:
+
+```
+TPM (429) scenario will be triggered between 30 and 90 seconds
+TPM will only apply to requests with auth keys: Bearer key-A,Bearer key-B
+```
+
+When the first request is actually rate-limited, it logs:
 
 ```
 TPM (429) scenario triggered after X seconds
