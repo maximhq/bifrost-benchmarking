@@ -281,6 +281,9 @@ var (
 	tpm                int
 	tpmDuration        int
 	tpmAuthKeys        string
+	latencyAfter       int
+	latencySpike       int
+	latencySpikeLogged bool
 	logRaw             bool
 	startTime          time.Time
 	tpmTriggeredLogged bool
@@ -300,6 +303,8 @@ func init() {
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
+	flag.IntVar(&latencyAfter, "latency-after", getEnvInt("MOCKER_LATENCY_AFTER", 0), "Seconds after startup to switch base latency to -latency-spike (0 = disabled). Models a healthy->slow transition for latency-anomaly tests.")
+	flag.IntVar(&latencySpike, "latency-spike", getEnvInt("MOCKER_LATENCY_SPIKE", 0), "Spiked latency in milliseconds applied once -latency-after elapses")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 }
 
@@ -341,10 +346,28 @@ func StrPtr(s string) *string {
 	return &s
 }
 
+// effectiveBaseLatency returns the current base latency in ms, applying the
+// timed spike: once -latency-after seconds have elapsed since startup, the
+// base latency switches to -latency-spike. Models a healthy->slow transition
+// so MV-TACOS latency-anomaly detection has a baseline to deviate from.
+func effectiveBaseLatency() int {
+	if latencyAfter > 0 && latencySpike > 0 && !startTime.IsZero() {
+		if int(time.Since(startTime).Seconds()) >= latencyAfter {
+			if !latencySpikeLogged {
+				log.Printf("Latency spike active: base latency now %dms (after %ds)", latencySpike, latencyAfter)
+				latencySpikeLogged = true
+			}
+			return latencySpike
+		}
+	}
+	return latency
+}
+
 // simulateLatency handles latency simulation with optional jitter
 func simulateLatency() {
-	if latency > 0 || jitter > 0 {
-		actualLatency := latency
+	base := effectiveBaseLatency()
+	if base > 0 || jitter > 0 {
+		actualLatency := base
 		if jitter > 0 {
 			jitterOffset := rand.Intn(2*jitter+1) - jitter
 			actualLatency += jitterOffset
@@ -588,7 +611,7 @@ func getPerWordLatency(wordsCount int) time.Duration {
 		return 0
 	}
 
-	actualLatency := latency
+	actualLatency := effectiveBaseLatency()
 	if jitter > 0 {
 		jitterOffset := rand.Intn(2*jitter+1) - jitter
 		actualLatency += jitterOffset
