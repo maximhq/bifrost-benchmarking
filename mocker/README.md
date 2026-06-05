@@ -17,7 +17,8 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
-- **Per-Chunk Latency**: For streaming responses, latency is automatically distributed across chunks for realistic streaming behavior
+- **Per-Chunk Latency**: For streaming responses, latency is distributed across chunks using deadline-based scheduling so end-to-end wall-clock matches `-latency` regardless of per-chunk serialization overhead
+- **Configurable Streaming Granularity**: `-tokens-per-chunk` controls how many words are batched into each SSE delta (default `5`); higher values reduce envelope overhead and more closely match real provider behavior, lower values stress per-chunk parsing
 - **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag
 - **Realistic Token Usage**: Returns random but realistic token usage statistics
 - **Configurable Port**: Specify listening port via the `-port` flag
@@ -124,8 +125,17 @@ go run main.go -port 8000 -log-raw
 
 ```bash
 go run main.go -port 8080 -latency 5000
-# Send a request with {"stream": true} to get server-sent event stream
-# Each chunk arrives with per-chunk latency (5000ms total split across chunks)
+# Send a request with {"stream": true} to get server-sent event stream.
+# Total stream wall-clock matches -latency (deadline-based scheduling); each
+# SSE delta batches -tokens-per-chunk words (default 5).
+
+go run main.go -port 8080 -latency 5000 -tokens-per-chunk 1
+# One word per chunk — ~5x more SSE events on the wire; useful for stressing
+# per-chunk parsing.
+
+go run main.go -port 8080 -latency 5000 -tokens-per-chunk 20 -big-payload
+# Fewer, fatter chunks (~20 words each) — closer to how OpenAI/Anthropic
+# actually batch streaming deltas in production.
 ```
 
 ### 3. Running in Docker
@@ -155,6 +165,7 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_PORT`: Port for the mock server (default: `8000`)
 - `MOCKER_LATENCY`: Base latency in milliseconds (default: `0`)
 - `MOCKER_JITTER`: Maximum jitter in milliseconds (default: `0`)
+- `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
 - `MOCKER_BIG_PAYLOAD`: Use large payloads - set to `true`, `1`, `false`, or `0` (default: `false`)
 - `MOCKER_AUTH`: Authentication header value to require (default: `""`)
 - `MOCKER_FAILURE_PERCENT`: Base failure percentage 0-100 (default: `0`)
