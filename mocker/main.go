@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -95,7 +95,7 @@ func parseProviderAndModel(rawModel string) (provider string, model string) {
 // parseModelFromRequest extracts model and provider from the OpenAI-style request body.
 func parseModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, model string, stream bool) {
 	var req GenericRequest
-	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+	if err := sonic.Unmarshal(ctx.Request.Body(), &req); err != nil {
 		return "", "gpt-4o-mini", false
 	}
 	provider, model = parseProviderAndModel(req.Model)
@@ -273,6 +273,7 @@ var (
 	port               int
 	latency            int
 	jitter             int
+	tokensPerChunk     int
 	bigPayload         bool
 	auth               string
 	withErrors         bool
@@ -291,6 +292,7 @@ func init() {
 	flag.IntVar(&port, "port", getEnvInt("MOCKER_PORT", 8000), "Port for the mock server to listen on")
 	flag.IntVar(&latency, "latency", getEnvInt("MOCKER_LATENCY", 0), "Latency in milliseconds to simulate")
 	flag.IntVar(&jitter, "jitter", getEnvInt("MOCKER_JITTER", 0), "Maximum jitter in milliseconds to add to latency (±jitter)")
+	flag.IntVar(&tokensPerChunk, "tokens-per-chunk", getEnvInt("MOCKER_TOKENS_PER_CHUNK", 5), "Words batched into each SSE delta when streaming (must be >=1)")
 	flag.BoolVar(&bigPayload, "big-payload", getEnvBool("MOCKER_BIG_PAYLOAD", false), "Use big payload")
 	flag.StringVar(&auth, "auth", getEnvString("MOCKER_AUTH", ""), "Add authentication header key")
 	flag.BoolVar(&withErrors, "with-errors", getEnvBool("MOCKER_WITH_ERRORS", false), "Enable provider-specific random error responses")
@@ -494,7 +496,7 @@ func maybeSendRandomProviderError(ctx *fasthttp.RequestCtx, provider string) boo
 	chosen := variants[rand.Intn(len(variants))]
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(chosen.Status)
-	if err := json.NewEncoder(ctx).Encode(chosen.Body); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(chosen.Body); err != nil {
 		log.Printf("Error encoding provider error response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode error response")
@@ -504,7 +506,7 @@ func maybeSendRandomProviderError(ctx *fasthttp.RequestCtx, provider string) boo
 
 func parseAnthropicModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, model string, stream bool) {
 	var req AnthropicRequest
-	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+	if err := sonic.Unmarshal(ctx.Request.Body(), &req); err != nil {
 		return "", "claude-3-5-sonnet-latest", false
 	}
 	provider, model = parseProviderAndModel(req.Model)
@@ -583,11 +585,35 @@ func getStreamWords(content string) []string {
 	return words
 }
 
-func getPerWordLatency(wordsCount int) time.Duration {
-	if wordsCount <= 1 {
-		return 0
+// buildStreamChunks groups words into delta strings, batching `tokensPerChunk`
+// words per chunk. Each chunk except the last has a trailing space so clients
+// concatenating deltas reproduce the original text without word merging.
+func buildStreamChunks(words []string) []string {
+	n := tokensPerChunk
+	if n < 1 {
+		n = 1
 	}
+	chunks := make([]string, 0, (len(words)+n-1)/n)
+	for i := 0; i < len(words); i += n {
+		end := i + n
+		if end > len(words) {
+			end = len(words)
+		}
+		chunk := strings.Join(words[i:end], " ")
+		if end < len(words) {
+			chunk += " "
+		}
+		chunks = append(chunks, chunk)
+	}
+	return chunks
+}
 
+// getStreamTotalLatency returns the total target wall-clock duration for a
+// streaming response, with jitter applied once. Streaming handlers use this
+// with deadline-based sleeping so per-iteration overhead (json marshal, flush
+// syscall, time.Sleep granularity) is absorbed into the next gap rather than
+// accumulating into end-to-end drift.
+func getStreamTotalLatency() time.Duration {
 	actualLatency := latency
 	if jitter > 0 {
 		jitterOffset := rand.Intn(2*jitter+1) - jitter
@@ -599,11 +625,24 @@ func getPerWordLatency(wordsCount int) time.Duration {
 	if actualLatency <= 0 {
 		return 0
 	}
-	return time.Duration(actualLatency/(wordsCount-1)) * time.Millisecond
+	return time.Duration(actualLatency) * time.Millisecond
+}
+
+// sleepUntilStreamDeadline sleeps until the wall-clock deadline for the (i+1)-th
+// gap of `gaps` total, anchored at `start`. If we're already past the deadline
+// (because earlier chunks ran long), it returns immediately.
+func sleepUntilStreamDeadline(start time.Time, total time.Duration, i, gaps int) {
+	if total <= 0 || gaps <= 0 {
+		return
+	}
+	deadline := start.Add(total * time.Duration(i+1) / time.Duration(gaps))
+	if d := time.Until(deadline); d > 0 {
+		time.Sleep(d)
+	}
 }
 
 func writeSSEJSON(w *bufio.Writer, event string, payload any) {
-	data, _ := json.Marshal(payload)
+	data, _ := sonic.Marshal(payload)
 	if event != "" {
 		_, _ = w.WriteString("event: " + event + "\n")
 	}
@@ -660,7 +699,7 @@ func sendErrorResponse(ctx *fasthttp.RequestCtx, statusCode int, message string)
 	}
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(statusCode)
-	if err := json.NewEncoder(ctx).Encode(errorResp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(errorResp); err != nil {
 		log.Printf("Error encoding error response: %v", err)
 	}
 }
@@ -697,15 +736,13 @@ func checkMethod(ctx *fasthttp.RequestCtx) bool {
 // sendStreamingResponse sends a streaming chat completion response in SSE format
 func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
 	setSSEHeaders(ctx)
-	words := getStreamWords(mockContent)
-	perWordLatency := getPerWordLatency(len(words))
+	tokens := buildStreamChunks(getStreamWords(mockContent))
+	gaps := len(tokens) - 1
+	totalLatency := getStreamTotalLatency()
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
-		for i, word := range words {
-			token := word
-			if i < len(words)-1 {
-				token += " "
-			}
+		start := time.Now()
+		for i, token := range tokens {
 			role := (*string)(nil)
 			if i == 0 {
 				role = StrPtr("assistant")
@@ -727,8 +764,8 @@ func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCon
 				},
 			}
 			writeSSEJSON(w, "", chunk)
-			if perWordLatency > 0 && i < len(words)-1 {
-				time.Sleep(perWordLatency)
+			if i < gaps {
+				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
 		}
 
@@ -753,10 +790,12 @@ func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCon
 func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
 	setSSEHeaders(ctx)
 	words := getStreamWords(mockContent)
-	perWordLatency := getPerWordLatency(len(words))
+	tokens := buildStreamChunks(words)
+	gaps := len(tokens) - 1
+	totalLatency := getStreamTotalLatency()
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
-		start := map[string]any{
+		startMsg := map[string]any{
 			"type": "message_start",
 			"message": AnthropicStreamMessage{
 				ID:           "msg_mock12345",
@@ -768,18 +807,15 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 				StopSequence: nil,
 			},
 		}
-		writeSSEJSON(w, "message_start", start)
+		writeSSEJSON(w, "message_start", startMsg)
 		writeSSEJSON(w, "content_block_start", map[string]any{
 			"type":          "content_block_start",
 			"index":         0,
 			"content_block": AnthropicContentBlock{Type: "text", Text: ""},
 		})
 
-		for i, word := range words {
-			token := word
-			if i < len(words)-1 {
-				token += " "
-			}
+		start := time.Now()
+		for i, token := range tokens {
 			writeSSEJSON(w, "content_block_delta", map[string]any{
 				"type":  "content_block_delta",
 				"index": 0,
@@ -788,8 +824,8 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 					Text: token,
 				},
 			})
-			if perWordLatency > 0 && i < len(words)-1 {
-				time.Sleep(perWordLatency)
+			if i < gaps {
+				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
 		}
 
@@ -816,15 +852,13 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 
 func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
 	setSSEHeaders(ctx)
-	words := getStreamWords(mockContent)
-	perWordLatency := getPerWordLatency(len(words))
+	tokens := buildStreamChunks(getStreamWords(mockContent))
+	gaps := len(tokens) - 1
+	totalLatency := getStreamTotalLatency()
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
-		for i, word := range words {
-			token := word
-			if i < len(words)-1 {
-				token += " "
-			}
+		start := time.Now()
+		for i, token := range tokens {
 			chunk := map[string]any{
 				"candidates": []map[string]any{
 					{
@@ -839,8 +873,8 @@ func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCont
 				"modelVersion": model,
 			}
 			writeSSEJSON(w, "", chunk)
-			if perWordLatency > 0 && i < len(words)-1 {
-				time.Sleep(perWordLatency)
+			if i < gaps {
+				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
 		}
 
@@ -865,7 +899,9 @@ func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCont
 func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockContent string) {
 	setSSEHeaders(ctx)
 	words := getStreamWords(mockContent)
-	perWordLatency := getPerWordLatency(len(words))
+	tokens := buildStreamChunks(words)
+	gaps := len(tokens) - 1
+	totalLatency := getStreamTotalLatency()
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
 		writeSSEJSON(w, "", map[string]any{
@@ -875,11 +911,8 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 			},
 		})
 
-		for i, word := range words {
-			token := word
-			if i < len(words)-1 {
-				token += " "
-			}
+		start := time.Now()
+		for i, token := range tokens {
 			writeSSEJSON(w, "", map[string]any{
 				"contentBlockDelta": map[string]any{
 					"contentBlockIndex": 0,
@@ -888,8 +921,8 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 					},
 				},
 			})
-			if perWordLatency > 0 && i < len(words)-1 {
-				time.Sleep(perWordLatency)
+			if i < gaps {
+				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
 		}
 
@@ -987,7 +1020,7 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(mockResp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(mockResp); err != nil {
 		log.Printf("Error encoding mock response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
@@ -1057,7 +1090,7 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding mock response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
@@ -1129,7 +1162,7 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding embeddings response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
@@ -1192,7 +1225,7 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding anthropic response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
@@ -1261,7 +1294,7 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding genai response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
@@ -1324,7 +1357,7 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(resp); err != nil {
 		log.Printf("Error encoding bedrock response: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString("Failed to encode response")
