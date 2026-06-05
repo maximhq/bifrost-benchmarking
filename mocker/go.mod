@@ -3,7 +3,7 @@ module mocker
 go 1.24.1
 
 require (
-	github.com/bytedance/sonic v1.15.1
+	github.com/bytedance/sonic v1.15.2
 	github.com/maximhq/bifrost/core v1.0.7
 	github.com/valyala/fasthttp v1.68.0
 )
