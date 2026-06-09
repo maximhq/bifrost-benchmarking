@@ -281,12 +281,17 @@ var (
 	tpm                int
 	tpmDuration        int
 	tpmAuthKeys        string
-	latencyAfter       int
+	authKeyErrorMapStr     string
+	authKeyErrorMap        map[string]int
+	authKeyErrorDuration   int
+	authKeyErrorExpiredLog bool
+	latencyAfter           int
 	latencySpike       int
 	latencySpikeLogged bool
 	logRaw             bool
 	startTime          time.Time
 	tpmTriggeredLogged bool
+	authKeyErrorLogged bool
 )
 
 func init() {
@@ -303,6 +308,8 @@ func init() {
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
+	flag.StringVar(&authKeyErrorMapStr, "auth-key-error-map", getEnvString("MOCKER_AUTH_KEY_ERROR_MAP", ""), "Comma-separated auth-key=status-code pairs, e.g. 'sk-key-a=401,sk-key-b=429,sk-key-c=500'")
+	flag.IntVar(&authKeyErrorDuration, "auth-key-error-duration", getEnvInt("MOCKER_AUTH_KEY_ERROR_DURATION", 0), "Duration in seconds for auth key errors to apply (0 = indefinite)")
 	flag.IntVar(&latencyAfter, "latency-after", getEnvInt("MOCKER_LATENCY_AFTER", 0), "Seconds after startup to switch base latency to -latency-spike (0 = disabled). Models a healthy->slow transition for latency-anomaly tests.")
 	flag.IntVar(&latencySpike, "latency-spike", getEnvInt("MOCKER_LATENCY_SPIKE", 0), "Spiked latency in milliseconds applied once -latency-after elapses")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
@@ -671,6 +678,65 @@ func shouldTriggerTPM(authHeader string) bool {
 	return true
 }
 
+// parseAuthKeyErrorMap parses a comma-separated list of auth-key=status-code
+// pairs into a map. e.g. "sk-key-a=401,sk-key-b=429" → {"sk-key-a": 401, "sk-key-b": 429}
+func parseAuthKeyErrorMap(raw string) map[string]int {
+	m := make(map[string]int)
+	if raw == "" {
+		return m
+	}
+	for _, pair := range strings.Split(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			log.Printf("WARN: invalid auth-key-error-map entry (ignored): %q", pair)
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		code, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || code < 400 || code > 599 {
+			log.Printf("WARN: invalid status code in auth-key-error-map entry (ignored): %q", pair)
+			continue
+		}
+		m[key] = code
+	}
+	return m
+}
+
+// shouldReturnAuthKeyError checks whether the request's Authorization header
+// matches an entry in authKeyErrorMap and, if so, sends the configured error
+// response and returns true.
+func shouldReturnAuthKeyError(ctx *fasthttp.RequestCtx) bool {
+	if len(authKeyErrorMap) == 0 {
+		return false
+	}
+	if authKeyErrorDuration > 0 && !startTime.IsZero() {
+		elapsed := int(time.Since(startTime).Seconds())
+		if elapsed >= authKeyErrorDuration {
+			if !authKeyErrorExpiredLog {
+				log.Printf("Auth key error duration expired after %ds", authKeyErrorDuration)
+				authKeyErrorExpiredLog = true
+			}
+			return false
+		}
+	}
+	authHeader := string(ctx.Request.Header.Peek("Authorization"))
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	code, ok := authKeyErrorMap[token]
+	if !ok {
+		return false
+	}
+	if !authKeyErrorLogged {
+		log.Printf("Auth key error map triggered: token=%q status=%d (duration=%ds)", token, code, authKeyErrorDuration)
+		authKeyErrorLogged = true
+	}
+	sendErrorResponse(ctx, code, "Mock error for key health scenario (auth-key-error-map)")
+	return true
+}
+
 // sendErrorResponse sends a standardized error response
 func sendErrorResponse(ctx *fasthttp.RequestCtx, statusCode int, message string) {
 	errorResp := OpenAIError{
@@ -945,6 +1011,9 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, stream := parseModelFromRequest(ctx)
 
+	if shouldReturnAuthKeyError(ctx) {
+		return
+	}
 	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
@@ -1023,6 +1092,9 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
 
+	if shouldReturnAuthKeyError(ctx) {
+		return
+	}
 	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
@@ -1093,6 +1165,9 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
 
+	if shouldReturnAuthKeyError(ctx) {
+		return
+	}
 	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
@@ -1165,6 +1240,9 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, stream := parseAnthropicModelFromRequest(ctx)
 
+	if shouldReturnAuthKeyError(ctx) {
+		return
+	}
 	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
@@ -1229,6 +1307,9 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 	provider, model := parseGenAIModelFromPath(string(ctx.Path()))
 	isStreamPath := strings.Contains(string(ctx.Path()), ":streamGenerateContent")
 
+	if shouldReturnAuthKeyError(ctx) {
+		return
+	}
 	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
@@ -1297,6 +1378,9 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 	model, isConverse, isStream := parseBedrockModelFromPath(string(ctx.Path()))
 
+	if shouldReturnAuthKeyError(ctx) {
+		return
+	}
 	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
@@ -1441,6 +1525,7 @@ func router(ctx *fasthttp.RequestCtx) {
 
 func main() {
 	flag.Parse()
+	authKeyErrorMap = parseAuthKeyErrorMap(authKeyErrorMapStr)
 
 	startTime = time.Now()
 
