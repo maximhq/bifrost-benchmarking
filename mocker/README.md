@@ -17,6 +17,9 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
+- **Per-Key Latency Targeting**: `-latency-auth-keys` scopes latency/jitter to specific API keys — listed keys are slow, all others respond instantly (mirrors `-tpm-auth-keys`). Entries can override the global config per key with `key=latencyMs` or `key=latencyMs:jitterMs`
+- **Per-Key Failure Targeting**: `-failure-auth-keys` scopes the failure percentage to specific API keys — listed keys fail at the configured rate, all others always succeed
+- **Models List Endpoint**: `GET /v1/models` (and `/models`) returns an OpenAI-shaped model list configurable via `-models`, so gateway-side model discovery works against the mocker
 - **Per-Chunk Latency**: For streaming responses, latency is distributed across chunks using deadline-based scheduling so end-to-end wall-clock matches `-latency` regardless of per-chunk serialization overhead
 - **Configurable Streaming Granularity**: `-tokens-per-chunk` controls how many words are batched into each SSE delta (default `5`); higher values reduce envelope overhead and more closely match real provider behavior, lower values stress per-chunk parsing
 - **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag
@@ -61,6 +64,17 @@ go run main.go -port 8080 -latency 100
 ```bash
 go run main.go -port 8080 -latency 50 -jitter 20
 # 50ms base latency with ±20ms random jitter (30-70ms range)
+```
+
+**Per-key latency targeting:**
+
+```bash
+go run main.go -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A,key-B"
+# Only key-A and key-B sleep 500ms ±100ms; all other keys respond instantly
+
+go run main.go -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A=200,key-B=800:300,key-C"
+# Per-key overrides: key-A gets fixed 200ms, key-B gets 800ms ±300ms,
+# key-C falls back to the global 500ms ±100ms; all other keys respond instantly
 ```
 
 **Large payload testing:**
@@ -165,6 +179,9 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_PORT`: Port for the mock server (default: `8000`)
 - `MOCKER_LATENCY`: Base latency in milliseconds (default: `0`)
 - `MOCKER_JITTER`: Maximum jitter in milliseconds (default: `0`)
+- `MOCKER_LATENCY_AUTH_KEYS`: Comma-separated bearer token values that get the configured latency/jitter; all other keys respond instantly. Entries may carry a per-key override as `key=latencyMs` or `key=latencyMs:jitterMs` (e.g. `key-A=200,key-B=800:300,key-C`); bare keys use the global `MOCKER_LATENCY`/`MOCKER_JITTER`. `Bearer ` prefix is stripped automatically (default: `""`, latency applies to all requests)
+- `MOCKER_FAILURE_AUTH_KEYS`: Comma-separated bearer token values subject to the failure percentage; all other keys always succeed. `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
+- `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
 - `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
 - `MOCKER_BIG_PAYLOAD`: Use large payloads - set to `true`, `1`, `false`, or `0` (default: `false`)
 - `MOCKER_AUTH`: Authentication header value to require (default: `""`)
@@ -227,6 +244,9 @@ services:
 - `-port <port_number>`: Port for the mock server (default: `8000`)
 - `-latency <milliseconds>`: Base latency for each response (default: `0`)
 - `-jitter <milliseconds>`: Maximum random jitter added to latency, creating a range of ±jitter (default: `0`)
+- `-latency-auth-keys <keys>`: Comma-separated bearer token values that get the configured latency/jitter; all other keys respond instantly. Entries may carry a per-key override as `key=latencyMs` or `key=latencyMs:jitterMs` (e.g. `key-A=200,key-B=800:300,key-C`); bare keys use the global `-latency`/`-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, latency applies to all requests)
+- `-failure-auth-keys <keys>`: Comma-separated bearer token values subject to `-failure-percent`; all other keys always succeed. The `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
+- `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
 - `-big-payload`: Use large ~10KB response payloads instead of small ones (default: `false`)
 - `-auth <auth_header>`: Authentication header value to require. Requests must include this exact value in the `Authorization` header (default: `""`)
 - `-failure-percent <percentage>`: Base failure percentage (0-100) for simulating server errors (default: `0`)
@@ -246,6 +266,12 @@ The mock server supports the following endpoints:
 ### Health Check
 
 - `GET /health` - Health check endpoint for load balancers and monitoring. Returns `{"status":"healthy"}` with HTTP 200.
+
+### Models List
+
+- `GET /v1/models` - OpenAI-compatible model list (also `/models`, `/openai/v1/models`, `/openai/models`)
+
+Returns the model ids configured via `-models` / `MOCKER_MODELS` in the standard OpenAI list shape (`{"object":"list","data":[{"id":…,"object":"model",…}]}`). The endpoint validates auth (when `-auth` is set) but deliberately skips latency, failure, and TPM simulation — those flags shape inference behavior, while model discovery stays deterministic so gateway-side model catalogs can always populate.
 
 ### Chat Completions API
 
