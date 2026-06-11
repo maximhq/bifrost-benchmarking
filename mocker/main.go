@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -171,6 +172,19 @@ type OpenAIResponsesResponse struct {
 	Usage   schemas.LLMUsage            `json:"usage"`
 }
 
+// OpenAI List Models API structures
+type OpenAIModel struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int    `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
+
+type OpenAIModelsResponse struct {
+	Object string        `json:"object"` // "list"
+	Data   []OpenAIModel `json:"data"`
+}
+
 // OpenAI Embeddings API structures
 type OpenAIEmbeddingData struct {
 	Object    string    `json:"object"`    // "embedding"
@@ -273,16 +287,21 @@ var (
 	port               int
 	latency            int
 	jitter             int
+	latencyAuthKeys    string
 	tokensPerChunk     int
 	bigPayload         bool
 	auth               string
 	withErrors         bool
 	failurePercent     int
 	failureJitter      int
+	failureAuthKeys    string
 	tpm                int
 	tpmDuration        int
 	tpmAuthKeys        string
+	modelsList         string
 	logRaw             bool
+	rateLimitedKeys    string
+	rateLimitedKeyMap  map[string]bool
 	startTime          time.Time
 	tpmTriggeredLogged bool
 )
@@ -292,6 +311,7 @@ func init() {
 	flag.IntVar(&port, "port", getEnvInt("MOCKER_PORT", 8000), "Port for the mock server to listen on")
 	flag.IntVar(&latency, "latency", getEnvInt("MOCKER_LATENCY", 0), "Latency in milliseconds to simulate")
 	flag.IntVar(&jitter, "jitter", getEnvInt("MOCKER_JITTER", 0), "Maximum jitter in milliseconds to add to latency (±jitter)")
+	flag.StringVar(&latencyAuthKeys, "latency-auth-keys", getEnvString("MOCKER_LATENCY_AUTH_KEYS", ""), "Comma-separated Authorization header values that get latency; entries may override the global config per key as key=latencyMs or key=latencyMs:jitterMs; other keys respond instantly (empty = all requests)")
 	flag.IntVar(&tokensPerChunk, "tokens-per-chunk", getEnvInt("MOCKER_TOKENS_PER_CHUNK", 5), "Words batched into each SSE delta when streaming (must be >=1)")
 	flag.BoolVar(&bigPayload, "big-payload", getEnvBool("MOCKER_BIG_PAYLOAD", false), "Use big payload")
 	flag.StringVar(&auth, "auth", getEnvString("MOCKER_AUTH", ""), "Add authentication header key")
@@ -299,10 +319,13 @@ func init() {
 	flag.BoolVar(&withErrors, "witherrors", getEnvBool("MOCKER_WITH_ERRORS", false), "Alias of -with-errors")
 	flag.IntVar(&failurePercent, "failure-percent", getEnvInt("MOCKER_FAILURE_PERCENT", 0), "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", getEnvInt("MOCKER_FAILURE_JITTER", 0), "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
+	flag.StringVar(&failureAuthKeys, "failure-auth-keys", getEnvString("MOCKER_FAILURE_AUTH_KEYS", ""), "Comma-separated Authorization header values subject to the failure percentage; other keys always succeed (empty = all requests)")
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
+	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
+	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
 }
 
 // Helper functions to read environment variables with defaults
@@ -343,27 +366,113 @@ func StrPtr(s string) *string {
 	return &s
 }
 
-// simulateLatency handles latency simulation with optional jitter
-func simulateLatency() {
-	if latency > 0 || jitter > 0 {
-		actualLatency := latency
-		if jitter > 0 {
-			jitterOffset := rand.Intn(2*jitter+1) - jitter
-			actualLatency += jitterOffset
-			if actualLatency < 0 {
-				actualLatency = 0
-			}
+// authKeyMatches reports whether the request's Authorization header value is in
+// the comma-separated key list. An empty list matches every request. The
+// "Bearer " prefix is stripped from the header before comparison, so lists hold
+// raw token values (same convention as -tpm-auth-keys).
+func authKeyMatches(keysCSV string, authHeader string) bool {
+	if keysCSV == "" {
+		return true
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	for _, key := range strings.Split(keysCSV, ",") {
+		if strings.TrimSpace(key) == token {
+			return true
 		}
-		if actualLatency > 0 {
-			time.Sleep(time.Duration(actualLatency) * time.Millisecond)
+	}
+	return false
+}
+
+// latencySpec is the latency configuration resolved for a single request.
+type latencySpec struct {
+	latencyMs int
+	jitterMs  int
+}
+
+// actualMs returns the latency to apply for one request, with jitter
+// (±jitterMs, clamped at 0) rolled in.
+func (s latencySpec) actualMs() int {
+	actual := s.latencyMs
+	if s.jitterMs > 0 {
+		actual += rand.Intn(2*s.jitterMs+1) - s.jitterMs
+		if actual < 0 {
+			actual = 0
 		}
+	}
+	return actual
+}
+
+// parseLatencyEntry splits one -latency-auth-keys entry into its key and an
+// optional "=latencyMs" / "=latencyMs:jitterMs" override. The split happens at
+// the last '=' only when its right side parses as numbers, so keys containing
+// '=' (e.g. base64 padding) still work as bare entries.
+func parseLatencyEntry(entry string) (key string, spec latencySpec, hasSpec bool) {
+	idx := strings.LastIndex(entry, "=")
+	if idx < 0 {
+		return entry, latencySpec{}, false
+	}
+	latStr, jitStr, hasJitter := strings.Cut(entry[idx+1:], ":")
+	lat, err := strconv.Atoi(latStr)
+	if err != nil || lat < 0 {
+		return entry, latencySpec{}, false
+	}
+	jit := 0
+	if hasJitter {
+		jit, err = strconv.Atoi(jitStr)
+		if err != nil || jit < 0 {
+			return entry, latencySpec{}, false
+		}
+	}
+	return strings.TrimSpace(entry[:idx]), latencySpec{latencyMs: lat, jitterMs: jit}, true
+}
+
+// resolveLatencySpec returns the latency/jitter configuration for the request's
+// Authorization header and whether the request is subject to latency at all.
+// An empty key list matches every request with the global -latency/-jitter.
+// Listed keys may be bare ("key-A", globals apply) or carry a per-key override
+// ("key-A=200" or "key-A=200:50"); non-listed keys get no latency. The
+// "Bearer " prefix is stripped before comparison, same as authKeyMatches.
+func resolveLatencySpec(keysCSV string, authHeader string) (latencySpec, bool) {
+	if keysCSV == "" {
+		return latencySpec{latencyMs: latency, jitterMs: jitter}, true
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	for _, entry := range strings.Split(keysCSV, ",") {
+		key, spec, hasSpec := parseLatencyEntry(strings.TrimSpace(entry))
+		if key != token {
+			continue
+		}
+		if hasSpec {
+			return spec, true
+		}
+		return latencySpec{latencyMs: latency, jitterMs: jitter}, true
+	}
+	return latencySpec{}, false
+}
+
+// simulateLatency handles latency simulation with optional jitter. When
+// -latency-auth-keys is set, only requests carrying one of those keys sleep
+// (each for its per-key override when given, otherwise the global config);
+// everything else responds instantly.
+func simulateLatency(authHeader string) {
+	spec, ok := resolveLatencySpec(latencyAuthKeys, authHeader)
+	if !ok {
+		return
+	}
+	if actual := spec.actualMs(); actual > 0 {
+		time.Sleep(time.Duration(actual) * time.Millisecond)
 	}
 }
 
-// shouldFail checks if request should fail based on failure percentage with jitter
-func shouldFail() bool {
+// shouldFail checks if request should fail based on failure percentage with jitter.
+// When -failure-auth-keys is set, only requests carrying one of those keys are
+// subject to the failure rate; everything else always succeeds.
+func shouldFail(authHeader string) bool {
 	if withErrors {
 		// In with-errors mode, use provider-specific random errors only.
+		return false
+	}
+	if !authKeyMatches(failureAuthKeys, authHeader) {
 		return false
 	}
 	if failurePercent > 0 {
@@ -612,20 +721,19 @@ func buildStreamChunks(words []string) []string {
 // streaming response, with jitter applied once. Streaming handlers use this
 // with deadline-based sleeping so per-iteration overhead (json marshal, flush
 // syscall, time.Sleep granularity) is absorbed into the next gap rather than
-// accumulating into end-to-end drift.
-func getStreamTotalLatency() time.Duration {
-	actualLatency := latency
-	if jitter > 0 {
-		jitterOffset := rand.Intn(2*jitter+1) - jitter
-		actualLatency += jitterOffset
-		if actualLatency < 0 {
-			actualLatency = 0
-		}
-	}
-	if actualLatency <= 0 {
+// accumulating into end-to-end drift. Respects -latency-auth-keys: requests
+// from non-listed keys stream at full speed, and per-key overrides
+// ("key=latencyMs:jitterMs") take precedence over the global config.
+func getStreamTotalLatency(authHeader string) time.Duration {
+	spec, ok := resolveLatencySpec(latencyAuthKeys, authHeader)
+	if !ok {
 		return 0
 	}
-	return time.Duration(actualLatency) * time.Millisecond
+	actual := spec.actualMs()
+	if actual <= 0 {
+		return 0
+	}
+	return time.Duration(actual) * time.Millisecond
 }
 
 // sleepUntilStreamDeadline sleeps until the wall-clock deadline for the (i+1)-th
@@ -704,6 +812,32 @@ func sendErrorResponse(ctx *fasthttp.RequestCtx, statusCode int, message string)
 	}
 }
 
+// sendRateLimitResponse sends a 429 rate_limit_error response
+func sendRateLimitResponse(ctx *fasthttp.RequestCtx) {
+	errorResp := OpenAIError{
+		EventID: StrPtr("evt_mock_ratelimit_12345"),
+		Error: &ErrorField{
+			Type:    StrPtr("rate_limit_error"),
+			Code:    StrPtr("rate_limit_exceeded"),
+			Message: "Rate limit exceeded. Please retry after some time.",
+		},
+	}
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusTooManyRequests)
+	if err := json.NewEncoder(ctx).Encode(errorResp); err != nil {
+		log.Printf("Error encoding rate limit response: %v", err)
+	}
+}
+
+// isKeyRateLimited returns true if the request's Authorization header is in the rate-limited set
+func isKeyRateLimited(ctx *fasthttp.RequestCtx) bool {
+	if len(rateLimitedKeyMap) == 0 {
+		return false
+	}
+	authHeader := string(ctx.Request.Header.Peek("Authorization"))
+	return rateLimitedKeyMap[authHeader]
+}
+
 // checkAuth validates authorization header
 func checkAuth(ctx *fasthttp.RequestCtx) bool {
 	if auth != "" {
@@ -738,7 +872,7 @@ func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCon
 	setSSEHeaders(ctx)
 	tokens := buildStreamChunks(getStreamWords(mockContent))
 	gaps := len(tokens) - 1
-	totalLatency := getStreamTotalLatency()
+	totalLatency := getStreamTotalLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
 		start := time.Now()
@@ -792,7 +926,7 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 	words := getStreamWords(mockContent)
 	tokens := buildStreamChunks(words)
 	gaps := len(tokens) - 1
-	totalLatency := getStreamTotalLatency()
+	totalLatency := getStreamTotalLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
 		startMsg := map[string]any{
@@ -854,7 +988,7 @@ func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCont
 	setSSEHeaders(ctx)
 	tokens := buildStreamChunks(getStreamWords(mockContent))
 	gaps := len(tokens) - 1
-	totalLatency := getStreamTotalLatency()
+	totalLatency := getStreamTotalLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
 		start := time.Now()
@@ -901,7 +1035,7 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 	words := getStreamWords(mockContent)
 	tokens := buildStreamChunks(words)
 	gaps := len(tokens) - 1
-	totalLatency := getStreamTotalLatency()
+	totalLatency := getStreamTotalLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
 		writeSSEJSON(w, "", map[string]any{
@@ -955,15 +1089,15 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, stream := parseModelFromRequest(ctx)
 
-	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
-		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+		sendRateLimitResponse(ctx)
 		return
 	}
 	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
-	if shouldFail() {
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
@@ -989,7 +1123,7 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Non-streaming requests get the full latency upfront
-	simulateLatency()
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	// Non-streaming response
 	mockChoiceMessage := schemas.BifrostResponseChoiceMessage{
@@ -1033,15 +1167,15 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
 
-	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
-		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+		sendRateLimitResponse(ctx)
 		return
 	}
 	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
-	if shouldFail() {
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
@@ -1052,7 +1186,7 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		log.Printf("[responses] model=%s", model)
 	}
 
-	simulateLatency()
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
@@ -1103,15 +1237,15 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
 
-	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
-		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+		sendRateLimitResponse(ctx)
 		return
 	}
 	if maybeSendRandomProviderError(ctx, provider) {
 		return
 	}
 
-	if shouldFail() {
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
@@ -1126,7 +1260,7 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		log.Printf("[embeddings] model=%s", model)
 	}
 
-	simulateLatency()
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	embeddingDimensions := 1536
 	if bigPayload {
@@ -1183,7 +1317,7 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if shouldFail() {
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
@@ -1204,7 +1338,7 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	simulateLatency()
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	randomInputTokens := rand.Intn(1000)
 	randomOutputTokens := rand.Intn(1000)
@@ -1247,7 +1381,7 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if shouldFail() {
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
@@ -1268,7 +1402,7 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	simulateLatency()
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	randomInputTokens := rand.Intn(1000)
 	randomOutputTokens := rand.Intn(1000)
@@ -1314,7 +1448,7 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	if maybeSendRandomProviderError(ctx, "bedrock") {
 		return
 	}
-	if shouldFail() {
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
@@ -1337,7 +1471,7 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	simulateLatency()
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 	randomInputTokens := rand.Intn(1000)
 	randomOutputTokens := rand.Intn(1000)
 	resp := BedrockConverseResponse{
@@ -1364,10 +1498,97 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 }
 
+func mockModelsHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) {
+		return
+	}
+
+	if string(ctx.Method()) != "GET" {
+		sendErrorResponse(ctx, fasthttp.StatusMethodNotAllowed, "Only GET method is allowed")
+		return
+	}
+
+	now := int(time.Now().Unix())
+	models := []OpenAIModel{
+		{ID: "gpt-4o", Object: "model", Created: now, OwnedBy: "openai"},
+		{ID: "gpt-4o-mini", Object: "model", Created: now, OwnedBy: "openai"},
+		{ID: "gpt-4", Object: "model", Created: now, OwnedBy: "openai"},
+		{ID: "gpt-3.5-turbo", Object: "model", Created: now, OwnedBy: "openai"},
+		{ID: "text-embedding-ada-002", Object: "model", Created: now, OwnedBy: "openai"},
+		{ID: "text-embedding-3-small", Object: "model", Created: now, OwnedBy: "openai"},
+		{ID: "text-embedding-3-large", Object: "model", Created: now, OwnedBy: "openai"},
+	}
+
+	resp := OpenAIModelsResponse{
+		Object: "list",
+		Data:   models,
+	}
+
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
+		log.Printf("Error encoding models response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
+	}
+}
+
 func healthCheckHandler(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	ctx.SetBodyString(`{"status":"healthy"}`)
+}
+
+type OpenAIModelEntry struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int    `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
+
+type OpenAIModelsListResponse struct {
+	Object string             `json:"object"`
+	Data   []OpenAIModelEntry `json:"data"`
+}
+
+// mockListModelsHandler serves GET /v1/models with the ids configured via
+// -models. It validates auth but deliberately skips latency, failure, and TPM
+// simulation: those flags shape inference behavior, while model discovery
+// should stay deterministic so gateway-side model catalogs can always populate.
+func mockListModelsHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) {
+		return
+	}
+	if !ctx.IsGet() {
+		ctx.SetStatusCode(fasthttp.StatusMethodNotAllowed)
+		ctx.SetBodyString("Only GET method is allowed")
+		return
+	}
+
+	ids := strings.Split(modelsList, ",")
+	data := make([]OpenAIModelEntry, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		data = append(data, OpenAIModelEntry{
+			ID:      id,
+			Object:  "model",
+			Created: int(startTime.Unix()),
+			OwnedBy: "mocker",
+		})
+	}
+
+	log.Printf("[models] returning %d model(s)", len(data))
+	resp := OpenAIModelsListResponse{Object: "list", Data: data}
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(resp); err != nil {
+		log.Printf("Error encoding models response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
+	}
 }
 
 // logRawRequest prints the raw request line, all headers, and body to stdout (only if logRaw is enabled).
@@ -1422,6 +1643,8 @@ func router(ctx *fasthttp.RequestCtx) {
 	switch path {
 	case "/health":
 		healthCheckHandler(ctx)
+	case "/models", "/openai/models", "/openai/v1/models":
+		mockListModelsHandler(ctx)
 	case "/chat/completions", "/v1/chat/completions", "/openai/chat/completions", "/openai/v1/chat/completions":
 		mockChatCompletionsHandler(ctx)
 	case "/responses", "/v1/responses", "/openai/responses", "/openai/v1/responses":
@@ -1430,6 +1653,8 @@ func router(ctx *fasthttp.RequestCtx) {
 		mockEmbeddingsHandler(ctx)
 	case "/anthropic/v1/messages", "/anthropic/messages", "/v1/messages":
 		mockAnthropicMessagesHandler(ctx)
+	case "/v1/models":
+		mockModelsHandler(ctx)
 	default:
 		if _, isConverse, _ := parseBedrockModelFromPath(path); isConverse {
 			mockBedrockConverseHandler(ctx)
@@ -1454,11 +1679,27 @@ func main() {
 
 	startTime = time.Now()
 
+	rateLimitedKeyMap = make(map[string]bool)
+	if rateLimitedKeys != "" {
+		for _, k := range strings.Split(rateLimitedKeys, ",") {
+			if k = strings.TrimSpace(k); k != "" {
+				rateLimitedKeyMap[k] = true
+			}
+		}
+		log.Printf("Per-key rate limiting enabled for %d key(s)", len(rateLimitedKeyMap))
+	}
+
 	addr := fmt.Sprintf("%s:%d", host, port)
 	if jitter > 0 {
 		log.Printf("Mock LLM server (fasthttp) starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
 	} else {
 		log.Printf("Mock LLM server (fasthttp) starting on %s with latency %dms...\n", addr, latency)
+	}
+	if latencyAuthKeys != "" {
+		log.Printf("Latency will only apply to requests with auth keys: %s", latencyAuthKeys)
+	}
+	if failureAuthKeys != "" {
+		log.Printf("Failure simulation will only apply to requests with auth keys: %s", failureAuthKeys)
 	}
 	if tpm > 0 {
 		if tpmDuration > 0 {
