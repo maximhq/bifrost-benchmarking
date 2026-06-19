@@ -289,6 +289,8 @@ var (
 	jitter             int
 	latencyAuthKeys    string
 	tokensPerChunk     int
+	fixedInputTokens   int
+	fixedOutputTokens  int
 	bigPayload         bool
 	auth               string
 	withErrors         bool
@@ -313,13 +315,15 @@ func init() {
 	flag.IntVar(&jitter, "jitter", getEnvInt("MOCKER_JITTER", 0), "Maximum jitter in milliseconds to add to latency (±jitter)")
 	flag.StringVar(&latencyAuthKeys, "latency-auth-keys", getEnvString("MOCKER_LATENCY_AUTH_KEYS", ""), "Comma-separated Authorization header values that get latency; entries may override the global config per key as key=latencyMs or key=latencyMs:jitterMs; other keys respond instantly (empty = all requests)")
 	flag.IntVar(&tokensPerChunk, "tokens-per-chunk", getEnvInt("MOCKER_TOKENS_PER_CHUNK", 5), "Words batched into each SSE delta when streaming (must be >=1)")
+	flag.IntVar(&fixedInputTokens, "input-tokens", getEnvInt("MOCKER_INPUT_TOKENS", -1), "Fixed input/prompt token count to report in usage (negative = random/derived per request)")
+	flag.IntVar(&fixedOutputTokens, "output-tokens", getEnvInt("MOCKER_OUTPUT_TOKENS", -1), "Fixed output/completion token count to report in usage (negative = random/derived per request)")
 	flag.BoolVar(&bigPayload, "big-payload", getEnvBool("MOCKER_BIG_PAYLOAD", false), "Use big payload")
 	flag.StringVar(&auth, "auth", getEnvString("MOCKER_AUTH", ""), "Add authentication header key")
 	flag.BoolVar(&withErrors, "with-errors", getEnvBool("MOCKER_WITH_ERRORS", false), "Enable provider-specific random error responses")
 	flag.BoolVar(&withErrors, "witherrors", getEnvBool("MOCKER_WITH_ERRORS", false), "Alias of -with-errors")
 	flag.IntVar(&failurePercent, "failure-percent", getEnvInt("MOCKER_FAILURE_PERCENT", 0), "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", getEnvInt("MOCKER_FAILURE_JITTER", 0), "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
-	flag.StringVar(&failureAuthKeys, "failure-auth-keys", getEnvString("MOCKER_FAILURE_AUTH_KEYS", ""), "Comma-separated Authorization header values subject to the failure percentage; other keys always succeed (empty = all requests)")
+	flag.StringVar(&failureAuthKeys, "failure-auth-keys", getEnvString("MOCKER_FAILURE_AUTH_KEYS", ""), "Comma-separated Authorization header values subject to the failure percentage; entries may override the global config per key as key=percent or key=percent:jitter; other keys always succeed (empty = all requests)")
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
@@ -343,6 +347,26 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// resolveInputTokens returns the configured fixed input/prompt token count when
+// -input-tokens (MOCKER_INPUT_TOKENS) is set (>= 0); otherwise it returns the
+// supplied fallback (the existing random or request-derived value).
+func resolveInputTokens(fallback int) int {
+	if fixedInputTokens >= 0 {
+		return fixedInputTokens
+	}
+	return fallback
+}
+
+// resolveOutputTokens returns the configured fixed output/completion token count
+// when -output-tokens (MOCKER_OUTPUT_TOKENS) is set (>= 0); otherwise it returns
+// the supplied fallback (the existing random or request-derived value).
+func resolveOutputTokens(fallback int) int {
+	if fixedOutputTokens >= 0 {
+		return fixedOutputTokens
+	}
+	return fallback
 }
 
 func getEnvBool(key string, defaultValue bool) bool {
@@ -464,32 +488,92 @@ func simulateLatency(authHeader string) {
 	}
 }
 
+// failureSpec is the failure configuration resolved for a single request.
+type failureSpec struct {
+	percent int
+	jitter  int
+}
+
+// shouldFailNow rolls the dice for one request using percent ±jitter (clamped to
+// the 0-100 range) and reports whether this request should fail.
+func (s failureSpec) shouldFailNow() bool {
+	actual := s.percent
+	if s.jitter > 0 {
+		actual += rand.Intn(2*s.jitter+1) - s.jitter
+		if actual < 0 {
+			actual = 0
+		}
+		if actual > 100 {
+			actual = 100
+		}
+	}
+	return actual > 0 && rand.Intn(100) < actual
+}
+
+// parseFailureEntry splits one -failure-auth-keys entry into its key and an
+// optional "=percent" / "=percent:jitter" override. Mirrors parseLatencyEntry:
+// the split happens at the last '=' only when its right side parses as numbers,
+// so keys containing '=' (e.g. base64 padding) still work as bare entries.
+func parseFailureEntry(entry string) (key string, spec failureSpec, hasSpec bool) {
+	idx := strings.LastIndex(entry, "=")
+	if idx < 0 {
+		return entry, failureSpec{}, false
+	}
+	pctStr, jitStr, hasJitter := strings.Cut(entry[idx+1:], ":")
+	pct, err := strconv.Atoi(pctStr)
+	if err != nil || pct < 0 {
+		return entry, failureSpec{}, false
+	}
+	jit := 0
+	if hasJitter {
+		jit, err = strconv.Atoi(jitStr)
+		if err != nil || jit < 0 {
+			return entry, failureSpec{}, false
+		}
+	}
+	return strings.TrimSpace(entry[:idx]), failureSpec{percent: pct, jitter: jit}, true
+}
+
+// resolveFailureSpec returns the failure percent/jitter for the request's
+// Authorization header and whether the request is subject to failures at all.
+// An empty key list matches every request with the global
+// -failure-percent/-failure-jitter. Listed keys may be bare ("key-A", globals
+// apply) or carry a per-key override ("key-A=10" or "key-A=10:5"); non-listed
+// keys always succeed. The "Bearer " prefix is stripped before comparison, same
+// as authKeyMatches.
+func resolveFailureSpec(keysCSV string, authHeader string) (failureSpec, bool) {
+	if keysCSV == "" {
+		return failureSpec{percent: failurePercent, jitter: failureJitter}, true
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	for _, entry := range strings.Split(keysCSV, ",") {
+		key, spec, hasSpec := parseFailureEntry(strings.TrimSpace(entry))
+		if key != token {
+			continue
+		}
+		if hasSpec {
+			return spec, true
+		}
+		return failureSpec{percent: failurePercent, jitter: failureJitter}, true
+	}
+	return failureSpec{}, false
+}
+
 // shouldFail checks if request should fail based on failure percentage with jitter.
 // When -failure-auth-keys is set, only requests carrying one of those keys are
-// subject to the failure rate; everything else always succeeds.
+// subject to the failure rate; everything else always succeeds. Listed keys may
+// carry a per-key override ("key-A=10:5") to use a different rate than the global
+// -failure-percent/-failure-jitter.
 func shouldFail(authHeader string) bool {
 	if withErrors {
 		// In with-errors mode, use provider-specific random errors only.
 		return false
 	}
-	if !authKeyMatches(failureAuthKeys, authHeader) {
+	spec, ok := resolveFailureSpec(failureAuthKeys, authHeader)
+	if !ok {
 		return false
 	}
-	if failurePercent > 0 {
-		actualFailurePercent := failurePercent
-		if failureJitter > 0 {
-			jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
-			actualFailurePercent += jitterOffset
-			if actualFailurePercent < 0 {
-				actualFailurePercent = 0
-			}
-			if actualFailurePercent > 100 {
-				actualFailurePercent = 100
-			}
-		}
-		return actualFailurePercent > 0 && rand.Intn(100) < actualFailurePercent
-	}
-	return false
+	return spec.shouldFailNow()
 }
 
 func effectiveFailurePercent() int {
@@ -974,7 +1058,7 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 				"stop_sequence": nil,
 			},
 			"usage": map[string]any{
-				"output_tokens": len(words),
+				"output_tokens": resolveOutputTokens(len(words)),
 			},
 		})
 		writeSSEJSON(w, "message_stop", map[string]any{
@@ -1070,12 +1154,14 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 				"stopReason": "end_turn",
 			},
 		})
+		streamInputTokens := resolveInputTokens(rand.Intn(1000))
+		streamOutputTokens := resolveOutputTokens(len(words))
 		writeSSEJSON(w, "", map[string]any{
 			"metadata": map[string]any{
 				"usage": map[string]any{
-					"inputTokens":  rand.Intn(1000),
-					"outputTokens": len(words),
-					"totalTokens":  rand.Intn(1000) + len(words),
+					"inputTokens":  streamInputTokens,
+					"outputTokens": streamOutputTokens,
+					"totalTokens":  streamInputTokens + streamOutputTokens,
 				},
 			},
 		})
@@ -1136,8 +1222,8 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		FinishReason: StrPtr("stop"),
 	}
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	mockResp := OpenAIChatCompletionsResponse{
 		ID:      "cmpl-mock12345",
@@ -1193,8 +1279,8 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		mockContent = strings.Repeat(mockContent, 182)
 	}
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	resp := OpenAIResponsesResponse{
 		ID:      "resp-mock12345",
@@ -1282,7 +1368,7 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	randomPromptTokens := rand.Intn(100) + 1
+	randomPromptTokens := resolveInputTokens(rand.Intn(100) + 1)
 
 	resp := OpenAIEmbeddingsResponse{
 		Object: "list",
@@ -1340,8 +1426,8 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	resp := AnthropicMessageResponse{
 		ID:           "msg_mock12345",
@@ -1404,8 +1490,8 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	resp := GenAIResponse{
 		Candidates: []GenAICandidate{
@@ -1472,8 +1558,8 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 	resp := BedrockConverseResponse{
 		Output: BedrockConverseOutput{
 			Message: BedrockMessage{
@@ -1700,6 +1786,12 @@ func main() {
 	}
 	if failureAuthKeys != "" {
 		log.Printf("Failure simulation will only apply to requests with auth keys: %s", failureAuthKeys)
+	}
+	if fixedInputTokens >= 0 {
+		log.Printf("Reporting a fixed input token count of %d in usage", fixedInputTokens)
+	}
+	if fixedOutputTokens >= 0 {
+		log.Printf("Reporting a fixed output token count of %d in usage", fixedOutputTokens)
 	}
 	if tpm > 0 {
 		if tpmDuration > 0 {

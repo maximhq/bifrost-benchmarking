@@ -240,6 +240,128 @@ func TestResolveLatencySpecPerKeyOverrides(t *testing.T) {
 	}
 }
 
+func TestParseFailureEntry(t *testing.T) {
+	cases := []struct {
+		entry   string
+		key     string
+		spec    failureSpec
+		hasSpec bool
+	}{
+		{"key-a", "key-a", failureSpec{}, false},
+		{"key-a=10", "key-a", failureSpec{percent: 10}, true},
+		{"key-a=10:5", "key-a", failureSpec{percent: 10, jitter: 5}, true},
+		{"key-a=0", "key-a", failureSpec{}, true},
+		// '=' in the token (base64 padding) with no numeric suffix stays a bare key.
+		{"a2V5LWE=", "a2V5LWE=", failureSpec{}, false},
+		// '=' in the token plus a numeric override splits at the last '='.
+		{"a2V5LWE==30", "a2V5LWE=", failureSpec{percent: 30}, true},
+		// Malformed overrides degrade to bare keys.
+		{"key-a=abc", "key-a=abc", failureSpec{}, false},
+		{"key-a=10:xy", "key-a=10:xy", failureSpec{}, false},
+		{"key-a=-5", "key-a=-5", failureSpec{}, false},
+	}
+	for _, c := range cases {
+		key, spec, hasSpec := parseFailureEntry(c.entry)
+		if key != c.key || spec != c.spec || hasSpec != c.hasSpec {
+			t.Errorf("parseFailureEntry(%q) = (%q, %+v, %v), want (%q, %+v, %v)",
+				c.entry, key, spec, hasSpec, c.key, c.spec, c.hasSpec)
+		}
+	}
+}
+
+func TestResolveFailureSpecPerKeyOverrides(t *testing.T) {
+	prevFailurePercent := failurePercent
+	prevFailureJitter := failureJitter
+	defer func() {
+		failurePercent = prevFailurePercent
+		failureJitter = prevFailureJitter
+	}()
+
+	failurePercent = 50
+	failureJitter = 5
+	keys := "key-a=10:2, key-b=20, key-c"
+
+	spec, ok := resolveFailureSpec(keys, "Bearer key-a")
+	if !ok || spec != (failureSpec{percent: 10, jitter: 2}) {
+		t.Fatalf("resolveFailureSpec(key-a) = (%+v, %v), want override 10:2", spec, ok)
+	}
+	spec, ok = resolveFailureSpec(keys, "Bearer key-b")
+	if !ok || spec != (failureSpec{percent: 20}) {
+		t.Fatalf("resolveFailureSpec(key-b) = (%+v, %v), want override 20:0", spec, ok)
+	}
+	spec, ok = resolveFailureSpec(keys, "Bearer key-c")
+	if !ok || spec != (failureSpec{percent: 50, jitter: 5}) {
+		t.Fatalf("resolveFailureSpec(key-c) = (%+v, %v), want global 50:5", spec, ok)
+	}
+	if _, ok = resolveFailureSpec(keys, "Bearer key-d"); ok {
+		t.Fatalf("resolveFailureSpec(key-d) matched, want no match")
+	}
+	spec, ok = resolveFailureSpec("", "Bearer anything")
+	if !ok || spec != (failureSpec{percent: 50, jitter: 5}) {
+		t.Fatalf("resolveFailureSpec(empty list) = (%+v, %v), want global for all", spec, ok)
+	}
+}
+
+func TestShouldFailPerKeyOverrides(t *testing.T) {
+	prevFailurePercent := failurePercent
+	prevFailureJitter := failureJitter
+	prevFailureAuthKeys := failureAuthKeys
+	prevWithErrors := withErrors
+	defer func() {
+		failurePercent = prevFailurePercent
+		failureJitter = prevFailureJitter
+		failureAuthKeys = prevFailureAuthKeys
+		withErrors = prevWithErrors
+	}()
+
+	withErrors = false
+	failurePercent = 0
+	failureJitter = 0
+	// slow-key never fails (0%), fast-key always fails (100%), unlisted keys succeed.
+	failureAuthKeys = "slow-key=0, fast-key=100"
+
+	for i := 0; i < 50; i++ {
+		if shouldFail("Bearer slow-key") {
+			t.Fatalf("shouldFail(slow-key) must be false at 0%% override")
+		}
+		if !shouldFail("Bearer fast-key") {
+			t.Fatalf("shouldFail(fast-key) must be true at 100%% override")
+		}
+		if shouldFail("Bearer other-key") {
+			t.Fatalf("shouldFail(other-key) must be false when not listed")
+		}
+	}
+}
+
+func TestResolveTokensFixedAndFallback(t *testing.T) {
+	prevInput := fixedInputTokens
+	prevOutput := fixedOutputTokens
+	defer func() {
+		fixedInputTokens = prevInput
+		fixedOutputTokens = prevOutput
+	}()
+
+	// Negative sentinel = use the fallback (random/derived) value.
+	fixedInputTokens = -1
+	fixedOutputTokens = -1
+	if got := resolveInputTokens(123); got != 123 {
+		t.Fatalf("resolveInputTokens(123) with no override = %d, want 123", got)
+	}
+	if got := resolveOutputTokens(456); got != 456 {
+		t.Fatalf("resolveOutputTokens(456) with no override = %d, want 456", got)
+	}
+
+	// Configured values (including 0) override the fallback.
+	fixedInputTokens = 100
+	fixedOutputTokens = 0
+	if got := resolveInputTokens(123); got != 100 {
+		t.Fatalf("resolveInputTokens(123) with override 100 = %d, want 100", got)
+	}
+	if got := resolveOutputTokens(456); got != 0 {
+		t.Fatalf("resolveOutputTokens(456) with override 0 = %d, want 0", got)
+	}
+}
+
 func TestStreamLatencyPerKeyOverride(t *testing.T) {
 	prevLatency := latency
 	prevJitter := jitter
