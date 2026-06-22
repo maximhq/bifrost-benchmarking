@@ -306,7 +306,52 @@ var (
 	rateLimitedKeyMap  map[string]bool
 	startTime          time.Time
 	tpmTriggeredLogged bool
+
+	// Dynamic per-key latency behaviors:
+	// spikes = sparse latency outliers, ramp = gradual base drift, step = abrupt base change.
+	latencySpikeKeys string
+	latencyRampKeys  string
+	latencyStepKeys  string
+	spikeMap         = map[string]spikeSpec{}
+	rampMap          = map[string]int{}
+	stepMap          = map[string]stepSpec{}
 )
+
+// spikeSpec injects a latency outlier into pct% of requests by multiplying the
+// resolved latency by mult. Used to verify the LB's anomaly detector rejects
+// spikes from training rather than letting them drag the learned baseline.
+type spikeSpec struct {
+	pct  int
+	mult float64
+}
+
+// stepSpec abruptly replaces a key's base latency with toMs once atSec seconds
+// have elapsed — simulates a provider whose latency suddenly degrades.
+type stepSpec struct {
+	atSec int
+	toMs  int
+}
+
+// parseKVInt parses a "key=a:b" CSV into per-token (a,b) ints (b optional).
+func parseKVList(csv string, fn func(token string, a int, b string)) {
+	if csv == "" {
+		return
+	}
+	for _, entry := range strings.Split(csv, ",") {
+		entry = strings.TrimSpace(entry)
+		idx := strings.LastIndex(entry, "=")
+		if idx < 0 {
+			continue
+		}
+		token := strings.TrimSpace(entry[:idx])
+		aStr, bStr, _ := strings.Cut(entry[idx+1:], ":")
+		a, err := strconv.Atoi(strings.TrimSpace(aStr))
+		if err != nil {
+			continue
+		}
+		fn(token, a, strings.TrimSpace(bStr))
+	}
+}
 
 func init() {
 	flag.StringVar(&host, "host", getEnvString("MOCKER_HOST", "localhost"), "Host address to bind the mock server")
@@ -330,6 +375,9 @@ func init() {
 	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
+	flag.StringVar(&latencySpikeKeys, "latency-spike-keys", getEnvString("MOCKER_LATENCY_SPIKE_KEYS", ""), "Per-key sparse latency spikes as key=pct:mult (e.g. 'slow-key=10:5' → 10% of requests get 5x latency). Tests outlier rejection.")
+	flag.StringVar(&latencyRampKeys, "latency-ramp-keys", getEnvString("MOCKER_LATENCY_RAMP_KEYS", ""), "Per-key linear base-latency drift in ms added per minute elapsed (e.g. 'slow-key=2000'). Tests gradual-drift tracking.")
+	flag.StringVar(&latencyStepKeys, "latency-step-keys", getEnvString("MOCKER_LATENCY_STEP_KEYS", ""), "Per-key abrupt base-latency step as key=atSec:toMs (e.g. 'slow-key=30:8000' → at 30s base jumps to 8000ms). Tests abrupt-change handling.")
 }
 
 // Helper functions to read environment variables with defaults
@@ -426,6 +474,32 @@ func (s latencySpec) actualMs() int {
 	return actual
 }
 
+// computeLatencyMs resolves the final latency for one request, layering the
+// dynamic per-key behaviors on top of the static spec: abrupt step and linear
+// ramp adjust the BASE (so they shift the true distribution the LB should
+// learn), then symmetric jitter is rolled in, and finally a sparse spike may
+// multiply the result (an outlier the LB should reject, not learn).
+func computeLatencyMs(token string, spec latencySpec) int {
+	base := spec.latencyMs
+	if st, ok := stepMap[token]; ok && !startTime.IsZero() && int(time.Since(startTime).Seconds()) >= st.atSec {
+		base = st.toMs
+	}
+	if perMin, ok := rampMap[token]; ok && !startTime.IsZero() {
+		base += int(time.Since(startTime).Minutes() * float64(perMin))
+	}
+	actual := base
+	if spec.jitterMs > 0 {
+		actual += rand.Intn(2*spec.jitterMs+1) - spec.jitterMs
+	}
+	if sp, ok := spikeMap[token]; ok && sp.pct > 0 && rand.Intn(100) < sp.pct {
+		actual = int(float64(actual) * sp.mult)
+	}
+	if actual < 0 {
+		actual = 0
+	}
+	return actual
+}
+
 // parseLatencyEntry splits one -latency-auth-keys entry into its key and an
 // optional "=latencyMs" / "=latencyMs:jitterMs" override. The split happens at
 // the last '=' only when its right side parses as numbers, so keys containing
@@ -483,7 +557,8 @@ func simulateLatency(authHeader string) {
 	if !ok {
 		return
 	}
-	if actual := spec.actualMs(); actual > 0 {
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if actual := computeLatencyMs(token, spec); actual > 0 {
 		time.Sleep(time.Duration(actual) * time.Millisecond)
 	}
 }
@@ -813,7 +888,8 @@ func getStreamTotalLatency(authHeader string) time.Duration {
 	if !ok {
 		return 0
 	}
-	actual := spec.actualMs()
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	actual := computeLatencyMs(token, spec)
 	if actual <= 0 {
 		return 0
 	}
@@ -1774,6 +1850,27 @@ func main() {
 		}
 		log.Printf("Per-key rate limiting enabled for %d key(s)", len(rateLimitedKeyMap))
 	}
+
+	// Parse dynamic per-key latency behaviors.
+	parseKVList(latencySpikeKeys, func(token string, pct int, b string) {
+		mult := 5.0
+		if b != "" {
+			if m, err := strconv.ParseFloat(b, 64); err == nil {
+				mult = m
+			}
+		}
+		spikeMap[token] = spikeSpec{pct: pct, mult: mult}
+		log.Printf("Latency spikes for %q: %d%% of requests x%.1f", token, pct, mult)
+	})
+	parseKVList(latencyRampKeys, func(token string, perMin int, _ string) {
+		rampMap[token] = perMin
+		log.Printf("Latency ramp for %q: +%dms per minute", token, perMin)
+	})
+	parseKVList(latencyStepKeys, func(token string, atSec int, b string) {
+		toMs, _ := strconv.Atoi(b)
+		stepMap[token] = stepSpec{atSec: atSec, toMs: toMs}
+		log.Printf("Latency step for %q: at %ds base -> %dms", token, atSec, toMs)
+	})
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	if jitter > 0 {
