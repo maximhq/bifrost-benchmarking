@@ -358,7 +358,7 @@ func init() {
 	flag.IntVar(&port, "port", getEnvInt("MOCKER_PORT", 8000), "Port for the mock server to listen on")
 	flag.IntVar(&latency, "latency", getEnvInt("MOCKER_LATENCY", 0), "Latency in milliseconds to simulate")
 	flag.IntVar(&jitter, "jitter", getEnvInt("MOCKER_JITTER", 0), "Maximum jitter in milliseconds to add to latency (±jitter)")
-	flag.StringVar(&latencyAuthKeys, "latency-auth-keys", getEnvString("MOCKER_LATENCY_AUTH_KEYS", ""), "Comma-separated Authorization header values that get latency; entries may override the global config per key as key=latencyMs or key=latencyMs:jitterMs; other keys respond instantly (empty = all requests)")
+	flag.StringVar(&latencyAuthKeys, "latency-auth-keys", getEnvString("MOCKER_LATENCY_AUTH_KEYS", ""), "Comma-separated Authorization header values that get latency; entries may override the global config per key as key=latencyMs, key=latencyMs:jitterMs, or a percentile distribution key=p50:p90:p95:p99; other keys respond instantly (empty = all requests)")
 	flag.IntVar(&tokensPerChunk, "tokens-per-chunk", getEnvInt("MOCKER_TOKENS_PER_CHUNK", 5), "Words batched into each SSE delta when streaming (must be >=1)")
 	flag.IntVar(&fixedInputTokens, "input-tokens", getEnvInt("MOCKER_INPUT_TOKENS", -1), "Fixed input/prompt token count to report in usage (negative = random/derived per request)")
 	flag.IntVar(&fixedOutputTokens, "output-tokens", getEnvInt("MOCKER_OUTPUT_TOKENS", -1), "Fixed output/completion token count to report in usage (negative = random/derived per request)")
@@ -455,10 +455,51 @@ func authKeyMatches(keysCSV string, authHeader string) bool {
 	return false
 }
 
-// latencySpec is the latency configuration resolved for a single request.
+// latencySpec is the latency configuration resolved for a single request. A key
+// is configured in exactly one mode: either avg latency with optional symmetric
+// jitter (latencyMs/jitterMs), or a percentile distribution (pctl). The two are
+// mutually exclusive — pctl is non-nil only in percentile mode.
 type latencySpec struct {
 	latencyMs int
 	jitterMs  int
+	pctl      *percentileSpec
+}
+
+// percentileSpec describes a per-key latency distribution by its p50/p90/p95/p99
+// quantiles (ms). Per-request latencies are drawn so that, over many requests,
+// the observed percentiles converge to these values — see sample.
+type percentileSpec struct {
+	p50, p90, p95, p99 int
+}
+
+// lerp linearly interpolates between a and b at t in [0,1].
+func lerp(a, b int, t float64) int {
+	return a + int(float64(b-a)*t+0.5)
+}
+
+// sample draws one latency (ms) from the distribution defined by the quantiles,
+// treating them as points on the inverse CDF and interpolating linearly between
+// adjacent breakpoints. A uniform draw u maps to the matching segment so the
+// empirical p50/p90/p95/p99 reproduce the configured values. The body below p50
+// is mirrored about p50 (floored at 0) to give the bulk a plausible spread.
+func (p percentileSpec) sample() int {
+	u := rand.Float64()
+	switch {
+	case u < 0.5:
+		low := 2*p.p50 - p.p90
+		if low < 0 {
+			low = 0
+		}
+		return lerp(low, p.p50, u/0.5)
+	case u < 0.9:
+		return lerp(p.p50, p.p90, (u-0.5)/0.4)
+	case u < 0.95:
+		return lerp(p.p90, p.p95, (u-0.9)/0.05)
+	case u < 0.99:
+		return lerp(p.p95, p.p99, (u-0.95)/0.04)
+	default:
+		return p.p99
+	}
 }
 
 // actualMs returns the latency to apply for one request, with jitter
@@ -480,16 +521,23 @@ func (s latencySpec) actualMs() int {
 // learn), then symmetric jitter is rolled in, and finally a sparse spike may
 // multiply the result (an outlier the LB should reject, not learn).
 func computeLatencyMs(token string, spec latencySpec) int {
-	base := spec.latencyMs
-	if st, ok := stepMap[token]; ok && !startTime.IsZero() && int(time.Since(startTime).Seconds()) >= st.atSec {
-		base = st.toMs
-	}
-	if perMin, ok := rampMap[token]; ok && !startTime.IsZero() {
-		base += int(time.Since(startTime).Minutes() * float64(perMin))
-	}
-	actual := base
-	if spec.jitterMs > 0 {
-		actual += rand.Intn(2*spec.jitterMs+1) - spec.jitterMs
+	var actual int
+	if spec.pctl != nil {
+		// Percentile mode: draw from the configured distribution. Step/ramp,
+		// which shift a single base value, don't apply here.
+		actual = spec.pctl.sample()
+	} else {
+		base := spec.latencyMs
+		if st, ok := stepMap[token]; ok && !startTime.IsZero() && int(time.Since(startTime).Seconds()) >= st.atSec {
+			base = st.toMs
+		}
+		if perMin, ok := rampMap[token]; ok && !startTime.IsZero() {
+			base += int(time.Since(startTime).Minutes() * float64(perMin))
+		}
+		actual = base
+		if spec.jitterMs > 0 {
+			actual += rand.Intn(2*spec.jitterMs+1) - spec.jitterMs
+		}
 	}
 	if sp, ok := spikeMap[token]; ok && sp.pct > 0 && rand.Intn(100) < sp.pct {
 		actual = int(float64(actual) * sp.mult)
@@ -501,27 +549,47 @@ func computeLatencyMs(token string, spec latencySpec) int {
 }
 
 // parseLatencyEntry splits one -latency-auth-keys entry into its key and an
-// optional "=latencyMs" / "=latencyMs:jitterMs" override. The split happens at
-// the last '=' only when its right side parses as numbers, so keys containing
-// '=' (e.g. base64 padding) still work as bare entries.
+// optional override after the last '='. The override is colon-separated and its
+// field count selects the mode (mutually exclusive):
+//   - "latencyMs"                       -> avg latency, no jitter
+//   - "latencyMs:jitterMs"              -> avg latency with symmetric jitter
+//   - "p50:p90:p95:p99"                 -> percentile distribution (ascending)
+//
+// A 3-field override is ambiguous and rejected. The split happens at the last
+// '=' only when its right side parses as a valid override, so keys containing
+// '=' (e.g. base64 padding) still work as bare entries; anything that fails to
+// parse degrades to a bare key.
 func parseLatencyEntry(entry string) (key string, spec latencySpec, hasSpec bool) {
 	idx := strings.LastIndex(entry, "=")
 	if idx < 0 {
 		return entry, latencySpec{}, false
 	}
-	latStr, jitStr, hasJitter := strings.Cut(entry[idx+1:], ":")
-	lat, err := strconv.Atoi(latStr)
-	if err != nil || lat < 0 {
-		return entry, latencySpec{}, false
-	}
-	jit := 0
-	if hasJitter {
-		jit, err = strconv.Atoi(jitStr)
-		if err != nil || jit < 0 {
+	key = strings.TrimSpace(entry[:idx])
+	fields := strings.Split(entry[idx+1:], ":")
+	vals := make([]int, len(fields))
+	for i, f := range fields {
+		v, err := strconv.Atoi(f)
+		if err != nil || v < 0 {
 			return entry, latencySpec{}, false
 		}
+		vals[i] = v
 	}
-	return strings.TrimSpace(entry[:idx]), latencySpec{latencyMs: lat, jitterMs: jit}, true
+	switch len(vals) {
+	case 1:
+		return key, latencySpec{latencyMs: vals[0]}, true
+	case 2:
+		return key, latencySpec{latencyMs: vals[0], jitterMs: vals[1]}, true
+	case 4:
+		if !(vals[0] <= vals[1] && vals[1] <= vals[2] && vals[2] <= vals[3]) {
+			return entry, latencySpec{}, false
+		}
+		return key, latencySpec{
+			latencyMs: vals[0],
+			pctl:      &percentileSpec{p50: vals[0], p90: vals[1], p95: vals[2], p99: vals[3]},
+		}, true
+	default:
+		return entry, latencySpec{}, false
+	}
 }
 
 // resolveLatencySpec returns the latency/jitter configuration for the request's
