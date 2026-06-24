@@ -17,7 +17,8 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
 - **Latency Simulation**: Configurable response latency via the `-latency` flag
 - **Jitter Support**: Adds random variance to latency with the `-jitter` flag for more realistic network conditions
-- **Per-Key Latency Targeting**: `-latency-auth-keys` scopes latency/jitter to specific API keys — listed keys are slow, all others respond instantly (mirrors `-tpm-auth-keys`). Entries can override the global config per key with `key=latencyMs` or `key=latencyMs:jitterMs`
+- **Per-Key Latency Targeting**: `-latency-auth-keys` scopes latency/jitter to specific API keys — listed keys are slow, all others respond instantly (mirrors `-tpm-auth-keys`). Entries can override the global config per key with `key=latencyMs`, `key=latencyMs:jitterMs`, or a percentile distribution `key=p50:p90:p95:p99` (sampled so the observed percentiles match; mutually exclusive with the jitter form)
+- **Dynamic Per-Key Latency Behaviors**: Layer time- and probability-varying latency on top of the static per-key config to exercise load-balancer/anomaly-detection logic — `-latency-spike-keys` injects sparse latency outliers, `-latency-ramp-keys` drifts the base latency linearly over time, and `-latency-step-keys` abruptly steps the base latency at a chosen second
 - **Per-Key Failure Targeting**: `-failure-auth-keys` scopes the failure percentage to specific API keys — listed keys fail at the configured rate, all others always succeed. Entries can override the global config per key with `key=percent` or `key=percent:jitter`
 - **Models List Endpoint**: `GET /v1/models` (and `/models`) returns an OpenAI-shaped model list configurable via `-models`, so gateway-side model discovery works against the mocker
 - **Per-Chunk Latency**: For streaming responses, latency is distributed across chunks using deadline-based scheduling so end-to-end wall-clock matches `-latency` regardless of per-chunk serialization overhead
@@ -75,7 +76,36 @@ go run main.go -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A,key
 go run main.go -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A=200,key-B=800:300,key-C"
 # Per-key overrides: key-A gets fixed 200ms, key-B gets 800ms ±300ms,
 # key-C falls back to the global 500ms ±100ms; all other keys respond instantly
+
+go run main.go -port 8080 -latency-auth-keys "key-A=200:400:600:1200"
+# Percentile mode: key-A's latency is sampled so that, over many requests, the
+# observed p50≈200ms, p90≈400ms, p95≈600ms, p99≈1200ms (a realistic long tail).
+# Per key you pick ONE mode — avg(:jitter) OR p50:p90:p95:p99; they don't combine.
 ```
+
+**Dynamic per-key latency behaviors:**
+
+These layer on top of the resolved per-key latency to make a key's latency vary
+over time or by chance — useful for verifying how a gateway's load balancer or
+anomaly detector reacts to spikes, drift, and sudden degradation.
+
+```bash
+go run main.go -port 8080 -latency 500 -latency-auth-keys "spiky-key" -latency-spike-keys "spiky-key=10:5"
+# 10% of spiky-key requests get 5x latency (an outlier the LB should reject, not learn).
+# The multiplier is optional and defaults to 5 (e.g. "spiky-key=10" → 10% at 5x).
+
+go run main.go -port 8080 -latency 1000 -latency-auth-keys "drift-key" -latency-ramp-keys "drift-key=2000"
+# drift-key's base latency rises linearly by +2000ms for every minute elapsed
+# (1000ms at start, ~3000ms after 1 min, ~5000ms after 2 min). Tests gradual-drift tracking.
+
+go run main.go -port 8080 -latency 1000 -latency-auth-keys "step-key" -latency-step-keys "step-key=30:8000"
+# step-key responds at the base latency until 30s have elapsed, then its base
+# abruptly jumps to 8000ms. Tests abrupt-change handling.
+```
+
+Static jitter still applies on top of the ramped/stepped base, and spikes are
+rolled in last. The behaviors are independent and can target different keys at
+once (or the same key for combined effects).
 
 **Large payload testing:**
 
@@ -191,6 +221,9 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_LATENCY`: Base latency in milliseconds (default: `0`)
 - `MOCKER_JITTER`: Maximum jitter in milliseconds (default: `0`)
 - `MOCKER_LATENCY_AUTH_KEYS`: Comma-separated bearer token values that get the configured latency/jitter; all other keys respond instantly. Entries may carry a per-key override as `key=latencyMs` or `key=latencyMs:jitterMs` (e.g. `key-A=200,key-B=800:300,key-C`); bare keys use the global `MOCKER_LATENCY`/`MOCKER_JITTER`. `Bearer ` prefix is stripped automatically (default: `""`, latency applies to all requests)
+- `MOCKER_LATENCY_SPIKE_KEYS`: Comma-separated per-key sparse latency spikes as `key=pct:mult` (e.g. `slow-key=10:5` → 10% of that key's requests get 5x latency); `mult` is optional and defaults to `5`. The spike multiplies the resolved latency to produce outliers an LB should reject rather than learn. `Bearer ` prefix is stripped automatically (default: `""`, disabled)
+- `MOCKER_LATENCY_RAMP_KEYS`: Comma-separated per-key linear base-latency drift in ms added per minute elapsed (e.g. `slow-key=2000` → +2000ms each minute since server start). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
+- `MOCKER_LATENCY_STEP_KEYS`: Comma-separated per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `MOCKER_FAILURE_AUTH_KEYS`: Comma-separated bearer token values subject to the failure percentage; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `MOCKER_FAILURE_PERCENT`/`MOCKER_FAILURE_JITTER`. `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
 - `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
 - `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
@@ -257,7 +290,10 @@ services:
 - `-port <port_number>`: Port for the mock server (default: `8000`)
 - `-latency <milliseconds>`: Base latency for each response (default: `0`)
 - `-jitter <milliseconds>`: Maximum random jitter added to latency, creating a range of ±jitter (default: `0`)
-- `-latency-auth-keys <keys>`: Comma-separated bearer token values that get the configured latency/jitter; all other keys respond instantly. Entries may carry a per-key override as `key=latencyMs` or `key=latencyMs:jitterMs` (e.g. `key-A=200,key-B=800:300,key-C`); bare keys use the global `-latency`/`-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, latency applies to all requests)
+- `-latency-auth-keys <keys>`: Comma-separated bearer token values that get the configured latency/jitter; all other keys respond instantly. Entries may carry a per-key override as `key=latencyMs`, `key=latencyMs:jitterMs`, or a percentile distribution `key=p50:p90:p95:p99` (e.g. `key-A=200,key-B=800:300,key-C,key-D=200:400:600:1200`); percentile mode samples each request so the observed percentiles match the configured quantiles and is mutually exclusive with jitter; bare keys use the global `-latency`/`-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, latency applies to all requests)
+- `-latency-spike-keys <keys>`: Per-key sparse latency spikes as `key=pct:mult` (e.g. `slow-key=10:5` → 10% of that key's requests get 5x latency); `mult` is optional and defaults to `5`. Spikes multiply the resolved latency to produce outliers (for testing outlier rejection) and are rolled in after jitter. The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
+- `-latency-ramp-keys <keys>`: Per-key linear base-latency drift in ms added per minute elapsed (e.g. `slow-key=2000` → +2000ms each minute since server start). Adjusts the base before jitter so it shifts the distribution an LB should track. The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
+- `-latency-step-keys <keys>`: Per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `-failure-auth-keys <keys>`: Comma-separated bearer token values subject to `-failure-percent`; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `-failure-percent`/`-failure-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
 - `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
 - `-big-payload`: Use large ~10KB response payloads instead of small ones (default: `false`)
@@ -691,6 +727,7 @@ This helps track when rate limiting begins during load tests.
 
 - **Load Testing**: Test API gateway performance with predictable response times
 - **Network Simulation**: Simulate various network conditions with latency and jitter
+- **Load-Balancer / Anomaly-Detection Testing**: Use the dynamic per-key latency behaviors (spikes, ramp, step) to verify a gateway's load balancer reacts correctly to outliers, gradual drift, and sudden provider degradation
 - **Payload Testing**: Test system behavior with different response sizes
 - **Error Handling Testing**: Simulate server failures with configurable failure rates
 - **Authentication Testing**: Test authentication flows and error handling

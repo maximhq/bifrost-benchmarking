@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"testing"
 	"time"
 )
@@ -197,12 +198,55 @@ func TestParseLatencyEntry(t *testing.T) {
 		{"key-a=abc", "key-a=abc", latencySpec{}, false},
 		{"key-a=200:xy", "key-a=200:xy", latencySpec{}, false},
 		{"key-a=-5", "key-a=-5", latencySpec{}, false},
+		// 3 fields are ambiguous and rejected, degrading to a bare key.
+		{"key-a=100:200:300", "key-a=100:200:300", latencySpec{}, false},
 	}
 	for _, c := range cases {
 		key, spec, hasSpec := parseLatencyEntry(c.entry)
 		if key != c.key || spec != c.spec || hasSpec != c.hasSpec {
 			t.Errorf("parseLatencyEntry(%q) = (%q, %+v, %v), want (%q, %+v, %v)",
 				c.entry, key, spec, hasSpec, c.key, c.spec, c.hasSpec)
+		}
+	}
+}
+
+func TestParseLatencyEntryPercentiles(t *testing.T) {
+	// Valid ascending quantiles parse into percentile mode.
+	key, spec, hasSpec := parseLatencyEntry("key-a=200:400:600:1200")
+	if !hasSpec || key != "key-a" || spec.pctl == nil {
+		t.Fatalf("parseLatencyEntry percentile = (%q, %+v, %v), want percentile spec", key, spec, hasSpec)
+	}
+	if want := (percentileSpec{p50: 200, p90: 400, p95: 600, p99: 1200}); *spec.pctl != want {
+		t.Errorf("pctl = %+v, want %+v", *spec.pctl, want)
+	}
+	if spec.latencyMs != 200 || spec.jitterMs != 0 {
+		t.Errorf("percentile spec leaked jitter/avg: %+v", spec)
+	}
+
+	// Non-ascending quantiles are rejected and degrade to a bare key.
+	if k, s, ok := parseLatencyEntry("key-a=400:200:600:1200"); ok || s.pctl != nil || k != "key-a=400:200:600:1200" {
+		t.Errorf("non-ascending percentiles = (%q, %+v, %v), want bare key", k, s, ok)
+	}
+}
+
+func TestPercentileSampleHonorsQuantiles(t *testing.T) {
+	spec := percentileSpec{p50: 200, p90: 400, p95: 600, p99: 1200}
+	const n = 200000
+	samples := make([]int, n)
+	for i := range samples {
+		samples[i] = spec.sample()
+	}
+	sort.Ints(samples)
+
+	checks := []struct {
+		q    float64
+		want int
+	}{{0.5, spec.p50}, {0.9, spec.p90}, {0.95, spec.p95}, {0.99, spec.p99}}
+	for _, c := range checks {
+		got := samples[int(float64(n)*c.q)]
+		// Allow 8% slack for interpolation + finite-sample noise.
+		if diff := got - c.want; diff < -c.want*8/100 || diff > c.want*8/100 {
+			t.Errorf("observed p%.0f = %d, want ~%d", c.q*100, got, c.want)
 		}
 	}
 }
