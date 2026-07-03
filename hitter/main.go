@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"flag"
 	"io"
 	"log"
@@ -33,6 +34,33 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+// Multimodal request shapes used when an attachment (e.g. --pdf) is supplied.
+// Content becomes an array of typed parts instead of a plain string.
+type MultiModalRequest struct {
+	Model       string              `json:"model"`
+	Messages    []MultiModalMessage `json:"messages"`
+	MaxTokens   int                 `json:"max_tokens,omitempty"`
+	Temperature float64             `json:"temperature,omitempty"`
+	Stream      bool                `json:"stream,omitempty"`
+}
+
+type MultiModalMessage struct {
+	Role    string        `json:"role"`
+	Content []ContentPart `json:"content"`
+}
+
+type ContentPart struct {
+	Type string    `json:"type"`
+	Text string    `json:"text,omitempty"`
+	File *FilePart `json:"file,omitempty"`
+}
+
+// FilePart mirrors Bifrost's OpenAI "file" content block (ChatInputFile).
+type FilePart struct {
+	FileData string `json:"file_data"`
+	Filename string `json:"filename,omitempty"`
+}
+
 type Config struct {
 	URL         string
 	RPS         int
@@ -44,7 +72,17 @@ type Config struct {
 	Verbose     bool
 	Stream      bool
 	VirtualKey  string
+	PDFPath     string
+	Prompt      string
 }
+
+// Prebuilt request bodies, populated once at startup when --pdf is set so the
+// large (~27MB base64) body is encoded a single time and reused for every
+// request — keeps the hitter from becoming CPU-bound on JSON marshaling.
+var (
+	prebuiltBodies [][]byte
+	prebuiltLabels []string
+)
 
 type Stats struct {
 	totalRequests   int64
@@ -87,6 +125,11 @@ func main() {
 	log.Printf("   Models: %v", config.Models)
 	log.Printf("   Providers: %v", config.Providers)
 	log.Printf("   Stream: %v", config.Stream)
+
+	// Attachment mode: pre-encode the PDF into reusable request bodies.
+	if config.PDFPath != "" {
+		buildPDFBodies(config)
+	}
 
 	stats := &Stats{}
 
@@ -165,6 +208,8 @@ func parseFlags() *Config {
 	flag.BoolVar(&config.Verbose, "verbose", false, "Verbose logging")
 	flag.BoolVar(&config.Stream, "stream", false, "Enable streaming responses")
 	flag.StringVar(&config.VirtualKey, "virtual-key", "", "Virtual key to use for requests")
+	flag.StringVar(&config.PDFPath, "pdf", "", "Path to a PDF file to attach as a multimodal 'file' content block (enables attachment mode)")
+	flag.StringVar(&config.Prompt, "prompt", "", "Override the user prompt text (defaults to a random prompt, or a fixed summarize prompt in --pdf mode)")
 
 	modelsFlag := flag.String("models", "gpt-4,gpt-4o,gpt-4o-mini,gpt-4.1,gpt-5", "Comma-separated list of models")
 	providersFlag := flag.String("providers", "", "Comma-separated list of providers")
@@ -196,6 +241,60 @@ func parseFlags() *Config {
 	return config
 }
 
+// buildPDFBodies reads the PDF once, base64-encodes it once, and pre-marshals
+// one request body per model×provider combination. The bodies are reused for
+// every request so the large attachment is never re-encoded at request time.
+func buildPDFBodies(config *Config) {
+	data, err := os.ReadFile(config.PDFPath)
+	if err != nil {
+		log.Fatalf("Failed to read PDF %q: %v", config.PDFPath, err)
+	}
+	b64 := base64.StdEncoding.EncodeToString(data)
+	dataURL := "data:application/pdf;base64," + b64
+	log.Printf("📎 Loaded PDF %s: %d bytes raw, %d bytes base64", config.PDFPath, len(data), len(b64))
+
+	prompt := config.Prompt
+	if prompt == "" {
+		prompt = "Summarize the attached PDF document in detail."
+	}
+
+	providers := config.Providers
+	if len(providers) == 0 {
+		providers = []string{""}
+	}
+
+	for _, p := range providers {
+		for _, m := range config.Models {
+			model := m
+			if p != "" {
+				model = p + "/" + m
+			}
+			req := MultiModalRequest{
+				Model: model,
+				Messages: []MultiModalMessage{
+					{
+						Role: "user",
+						Content: []ContentPart{
+							{Type: "text", Text: prompt},
+							{Type: "file", File: &FilePart{FileData: dataURL, Filename: "test.pdf"}},
+						},
+					},
+				},
+				MaxTokens:   config.MaxTokens,
+				Temperature: config.Temperature,
+				Stream:      config.Stream,
+			}
+			body, err := sonic.Marshal(req)
+			if err != nil {
+				log.Fatalf("Failed to marshal PDF request for %q: %v", model, err)
+			}
+			prebuiltBodies = append(prebuiltBodies, body)
+			prebuiltLabels = append(prebuiltLabels, model)
+		}
+	}
+	log.Printf("📦 Prebuilt %d PDF request body/bodies, ~%d MB each", len(prebuiltBodies), len(prebuiltBodies[0])/(1024*1024))
+}
+
 func parseCommaSeparated(s string) []string {
 	var result []string
 	for _, segment := range strings.Split(s, ",") {
@@ -210,52 +309,66 @@ func parseCommaSeparated(s string) []string {
 func makeRequest(ctx context.Context, config *Config, stats *Stats, reqNum int) {
 	atomic.AddInt64(&stats.totalRequests, 1)
 
-	// Random selection
+	var jsonData []byte
+	var model string
 	provider := ""
-	if len(config.Providers) > 0 {
-		provider = config.Providers[rand.Intn(len(config.Providers))]
-	}
-	model := config.Models[rand.Intn(len(config.Models))]
 
-	// Random prompt selection
-	prompt := prompts[rand.Intn(len(prompts))]
-
-	// Add some variation to token usage
-	maxTokens := config.MaxTokens + rand.Intn(50) - 25 // ±25 tokens variation
-	if maxTokens < 10 {
-		maxTokens = 10
-	}
-
-	if provider != "" {
-		model = provider + "/" + model
-	}
-
-	request := ChatRequest{
-		Model: model,
-		Messages: []Message{
-			{
-				Role:    "user",
-				Content: prompt,
-			},
-		},
-		MaxTokens:   maxTokens,
-		Temperature: config.Temperature + (rand.Float64()-0.5)*0.2, // ±0.1 variation
-		Stream:      config.Stream,
-	}
-
-	jsonData, err := sonic.Marshal(request)
-	if err != nil {
-		atomic.AddInt64(&stats.errorRequests, 1)
-		if config.Verbose {
-			log.Printf("[%d] JSON marshal error: %v", reqNum, err)
+	if len(prebuiltBodies) > 0 {
+		// Attachment mode: reuse a pre-encoded body (no per-request marshaling).
+		idx := rand.Intn(len(prebuiltBodies))
+		jsonData = prebuiltBodies[idx]
+		model = prebuiltLabels[idx]
+	} else {
+		// Random selection
+		if len(config.Providers) > 0 {
+			provider = config.Providers[rand.Intn(len(config.Providers))]
 		}
-		return
+		model = config.Models[rand.Intn(len(config.Models))]
+
+		// Random prompt selection
+		prompt := prompts[rand.Intn(len(prompts))]
+		if config.Prompt != "" {
+			prompt = config.Prompt
+		}
+
+		// Add some variation to token usage
+		maxTokens := config.MaxTokens + rand.Intn(50) - 25 // ±25 tokens variation
+		if maxTokens < 10 {
+			maxTokens = 10
+		}
+
+		if provider != "" {
+			model = provider + "/" + model
+		}
+
+		request := ChatRequest{
+			Model: model,
+			Messages: []Message{
+				{
+					Role:    "user",
+					Content: prompt,
+				},
+			},
+			MaxTokens:   maxTokens,
+			Temperature: config.Temperature + (rand.Float64()-0.5)*0.2, // ±0.1 variation
+			Stream:      config.Stream,
+		}
+
+		var err error
+		jsonData, err = sonic.Marshal(request)
+		if err != nil {
+			atomic.AddInt64(&stats.errorRequests, 1)
+			if config.Verbose {
+				log.Printf("[%d] JSON marshal error: %v", reqNum, err)
+			}
+			return
+		}
 	}
 
 	startTime := time.Now()
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", config.URL, bytes.NewBuffer(jsonData))
+	// Create HTTP request (bytes.NewReader shares the prebuilt slice without copying)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", config.URL, bytes.NewReader(jsonData))
 	if err != nil {
 		atomic.AddInt64(&stats.errorRequests, 1)
 		if config.Verbose {

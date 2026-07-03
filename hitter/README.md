@@ -11,6 +11,7 @@ A high-performance load testing tool for testing Bifrost's chat completion endpo
 - 📊 Real-time statistics
 - 🔑 Virtual key authentication
 - 📈 Success rate tracking
+- 📎 PDF attachment mode (multimodal `file` content blocks)
 
 ## Installation
 
@@ -70,6 +71,8 @@ go run main.go [flags]
 | `--stream`      | bool     | `false`                                     | Enable streaming responses                   |
 | `--verbose`     | bool     | `false`                                     | Enable verbose logging                       |
 | `--virtual-key` | string   | `""`                                        | Virtual API key for authentication           |
+| `--pdf`         | string   | `""`                                        | Path to a PDF to attach as a multimodal `file` content block (enables attachment mode) |
+| `--prompt`      | string   | `""`                                        | Override the user prompt text (defaults to a random prompt, or a fixed summarize prompt in `--pdf` mode) |
 
 ## Examples
 
@@ -128,6 +131,30 @@ Test with specific providers:
   --virtual-key sk-bf-your-key-here
 ```
 
+### 6. PDF Attachment Test
+
+Send a PDF with every request as a multimodal `file` content block:
+
+```bash
+./hitter \
+  --pdf ../test-20mb.pdf \
+  --models "gpt-4o" \
+  --providers "openai" \
+  --rps 10 \
+  --duration 60s
+```
+
+Use `--prompt` to override the default "Summarize the attached PDF document in detail." prompt:
+
+```bash
+./hitter \
+  --pdf ../test-20mb.pdf \
+  --prompt "List the section headings of the attached PDF." \
+  --models "gpt-4o" \
+  --rps 10 \
+  --duration 60s
+```
+
 ## Important Notes
 
 ### ⚠️ Flag Syntax Rules
@@ -153,7 +180,15 @@ Test with specific providers:
 - **Random Selection**: For each request, a random model, provider, and prompt are selected from the configured options
 - **Token Variation**: Max tokens vary by ±25 tokens from the configured value
 - **Temperature Variation**: Temperature varies by ±0.1 from the configured value
+- **Fixed Prompt**: Passing `--prompt` replaces the random prompt selection with the given text
 - **Graceful Shutdown**: Press `Ctrl+C` to stop the test early and see final statistics
+
+### PDF Attachment Mode (`--pdf`)
+
+- The PDF is read and base64-encoded **once at startup**, and one request body is pre-marshaled per model×provider combination — requests reuse these bodies so the hitter never re-encodes the (potentially large) attachment per request
+- Each request sends a two-part user message: a text prompt plus a `file` content block (`data:application/pdf;base64,...`)
+- Because bodies are prebuilt, max-token and temperature variation are **not** applied in this mode; the configured values are used as-is
+- The prompt defaults to "Summarize the attached PDF document in detail." unless overridden with `--prompt`
 
 ### Model/Provider Format
 
