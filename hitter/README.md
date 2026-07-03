@@ -18,7 +18,7 @@ A high-performance load testing tool for testing Bifrost's chat completion endpo
 ### Build from source
 
 ```bash
-cd /path/to/bifrost-enterprise/cmd/hitter
+cd hitter
 go build -o hitter main.go
 ```
 
@@ -153,6 +153,14 @@ Use `--prompt` to override the default "Summarize the attached PDF document in d
   --models "gpt-4o" \
   --rps 10 \
   --duration 60s
+```
+
+### 7. All-Providers Sweep (`run_load_test.sh`)
+
+`run_load_test.sh` runs the hitter against every Bifrost-supported provider in parallel (10 RPS, 60s each), once without streaming and once with `--stream`. Extra flags are passed through:
+
+```bash
+./run_load_test.sh --url http://localhost:8080/v1/chat/completions --virtual-key sk-bf-your-key
 ```
 
 ## Important Notes
@@ -293,4 +301,4 @@ When modifying the tool:
 
 ## License
 
-Part of the Bifrost Enterprise project.
+Part of the [Bifrost benchmarking suite](../README.md), licensed under the [Apache License 2.0](../LICENSE).
