@@ -3,7 +3,7 @@ module bifrost-benchmarks
 go 1.24.1
 
 require (
-	github.com/bytedance/sonic v1.14.2
+	github.com/bytedance/sonic v1.15.1
 	github.com/joho/godotenv v1.5.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.4.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/influxdata/tdigest v0.0.1 // indirect

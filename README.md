@@ -1,261 +1,180 @@
-# Hitter - Load Testing Tool for Bifrost
+# Bifrost Benchmarking
 
-A high-performance load testing tool for testing Bifrost's chat completion endpoints with support for multiple models, providers, and streaming responses.
+Benchmarking and load-testing tools for [Bifrost](https://github.com/maximhq/bifrost), the fastest and most scalable AI gateway. This is the companion repo to [Run Your Own Benchmarks](https://docs.getbifrost.ai/benchmarking/run-your-own-benchmarks) — everything here is open source, and PRs are welcome.
 
-## Features
+## What's in this repo
 
-- 🚀 Configurable requests per second (RPS)
-- ⏱️ Customizable test duration
-- 🔄 Streaming and non-streaming support
-- 🎯 Multiple models and providers
-- 📊 Real-time statistics
-- 🔑 Virtual key authentication
-- 📈 Success rate tracking
+| Tool | What it is | Use it when you want to |
+| --- | --- | --- |
+| [`benchmark.go`](#gateway-benchmark-benchmarkgo) (this directory) | Gateway comparison benchmark built on Vegeta | Compare Bifrost against LiteLLM, Portkey, or raw OpenAI — latency percentiles, throughput, and server memory usage |
+| [`hitter/`](hitter/README.md) | Standalone load generator for chat completions | Load-test a single Bifrost deployment with realistic traffic: multiple models/providers, streaming, virtual keys, PDF attachments |
+| [`mocker/`](mocker/README.md) | Mock LLM provider server (fasthttp) | Simulate OpenAI / Anthropic / Gemini / Bedrock endpoints with configurable latency, failures, and rate limits — no API costs, no provider noise |
+| [`mcp-code-mode-benchmark/`](mcp-code-mode-benchmark/README.md) | MCP Code Mode benchmark (Python) | Reproduce our token/latency/pass-rate numbers for [Bifrost's MCP Code Mode](https://docs.getbifrost.ai/mcp/code-mode) |
 
-## Installation
+The gateway benchmark is documented in full below. The other three tools each have their own README — follow the links above.
 
-### Build from source
+**Typical setup:** run the **mocker** as a stand-in provider, point the gateways at it, and drive load with **`benchmark.go`** (to compare gateways) or the **hitter** (to stress Bifrost in isolation). Using the mocker isolates *gateway overhead* from provider latency and keeps runs free and reproducible.
 
-```bash
-cd /path/to/bifrost-enterprise/cmd/hitter
-go build -o hitter main.go
-```
-
-### Or run directly
+## Quickstart
 
 ```bash
-go run main.go [flags]
+git clone https://github.com/maximhq/bifrost-benchmarking.git
+cd bifrost-benchmarking
+go mod tidy
+go build benchmark.go
 ```
 
-## Usage
-
-### Basic Example
+**1. Start the mock provider** (optional, but recommended — see [mocker/README.md](mocker/README.md) for all flags):
 
 ```bash
-./hitter --rps 100 --duration 60s
+cd mocker && go run main.go -port 8000
 ```
 
-### With Custom Models and Providers
+**2. Start Bifrost** and point an OpenAI provider at the mocker (base URL `http://localhost:8000`, any dummy API key):
 
 ```bash
-./hitter \
-  --models "gpt-4o,gpt-4o-mini,claude-3-opus" \
-  --providers "openai,anthropic" \
-  --rps 50 \
-  --duration 120s
+npx -y @maximhq/bifrost
+# or: docker run -p 8080:8080 maximhq/bifrost
 ```
 
-### With Streaming
+Setup details, performance tuning (concurrency, buffer and pool sizes), and Docker networking notes for reaching the mocker from inside a container are in the [Bifrost docs](https://docs.getbifrost.ai/quickstart/gateway/setting-up).
+
+**3. Create a `.env`** in the repo root with the port of each gateway you plan to benchmark:
+
+```env
+BIFROST_PORT=8080
+LITELLM_PORT=4000
+PORTKEY_PORT=8787
+OPENAI_API_KEY=sk-...   # only needed for the openai/portkey providers
+```
+
+**4. Run the benchmark:**
 
 ```bash
-./hitter \
-  --stream \
-  --models "gpt-4o,gpt-5.2" \
-  --rps 100 \
-  --duration 60s \
-  --virtual-key sk-bf-xxxxx
+./benchmark -provider bifrost -rate 500 -duration 30
 ```
 
-## Command-Line Flags
+Results land in `results.json` (keyed by provider, latest run per provider).
 
-| Flag            | Type     | Default                                     | Description                                  |
-| --------------- | -------- | ------------------------------------------- | -------------------------------------------- |
-| `--url`         | string   | `http://localhost:8080/v1/chat/completions` | Target API endpoint                          |
-| `--rps`         | int      | `100`                                       | Requests per second                          |
-| `--duration`    | duration | `60s`                                       | Test duration (e.g., 30s, 5m, 1h)            |
-| `--models`      | string   | `gpt-4,gpt-4o,gpt-4o-mini,gpt-4.1,gpt-5`    | Comma-separated list of models to test       |
-| `--providers`   | string   | `""`                                        | Comma-separated list of providers (optional) |
-| `--max-tokens`  | int      | `150`                                       | Maximum tokens per request                   |
-| `--temperature` | float    | `0.7`                                       | Temperature for model responses              |
-| `--stream`      | bool     | `false`                                     | Enable streaming responses                   |
-| `--verbose`     | bool     | `false`                                     | Enable verbose logging                       |
-| `--virtual-key` | string   | `""`                                        | Virtual API key for authentication           |
+## Gateway benchmark (`benchmark.go`)
 
-## Examples
+A command-line tool that fires load at one or more gateways and records latency percentiles, throughput, success rates, drop reasons, and server-side memory usage (it finds the server process by port and samples RSS during the run).
 
-### 1. High-Load Test
+### Flags
 
-Test with 500 requests per second for 5 minutes:
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `-rate` | int | 0 (required\*) | Requests per second (mutually exclusive with `-users`) |
+| `-users` | int | 0 (required\*) | Concurrent users to maintain (mutually exclusive with `-rate`) |
+| `-duration` | int | 10 | Test duration in seconds |
+| `-timeout` | int | 300 | Request timeout in seconds (set to duration + expected backend latency) |
+| `-output` | string | results.json | Output file for results |
+| `-cooldown` | int | 60 | Cooldown between provider tests in seconds |
+| `-provider` | string | "" | Provider to benchmark: `bifrost`, `litellm`, `portkey`, or `openai`. **Empty runs all four** |
+| `-big-payload` | bool | false | Use a ~10KB payload instead of the ~200B default |
+| `-model` | string | gpt-4o-mini | Model to put in the request payload |
+| `-suffix` | string | v1 | URL route suffix (e.g. `v1`) |
+| `-prompt-file` | string | "" | Path to a file whose content is used as the prompt |
+| `-path` | string | chat/completions | API path to hit (e.g. `chat/completions` or `embeddings`) |
+| `-request-type` | string | chat | `chat` or `embedding` — controls payload shape |
+| `-host` | string | localhost | Host address of the gateway servers |
+| `-ramp-up` | bool | false | Gradually ramp users up (only with `-users`, requires `-ramp-up-duration`) |
+| `-ramp-up-duration` | int | 0 | Seconds to ramp from 1 to `-users` users |
+| `-debug` | bool | false | Detailed logging and periodic status updates during the run |
+
+\* Exactly one of `-rate` or `-users` must be provided.
+
+> **Note:** omitting `-provider` benchmarks *all* providers sequentially — including `openai`, which sends real requests to `api.openai.com` using your `OPENAI_API_KEY`. Pass `-provider` explicitly unless that's what you want.
+
+### Rate-based vs concurrent-users mode
+
+**`-rate` (fixed RPS, via Vegeta):** sends requests at a constant rate regardless of response times. Best for measuring throughput capacity and latency under a known load.
 
 ```bash
-./hitter --rps 500 --duration 5m --verbose
+./benchmark -provider bifrost -rate 1000 -duration 30
 ```
 
-### 2. Multiple Models Test
-
-Test different models simultaneously:
+**`-users` (fixed concurrency, via the `pkg/concurrent` semaphore):** keeps exactly N requests in flight — as one completes, the next is dispatched. Throughput becomes `≈ users / avg_latency`. Best for simulating connection pools and realistic client behavior.
 
 ```bash
-./hitter \
-  --models "gpt-4o,gpt-4o-mini,gpt-5.2,claude-3-opus" \
-  --rps 200 \
-  --duration 180s
+./benchmark -provider bifrost -users 250 -duration 60
 ```
 
-### 3. Provider-Specific Test
-
-Test with specific providers:
+**Ramp-up** (only with `-users`): grow from 1 to N users over a window, then hold.
 
 ```bash
-./hitter \
-  --models "gpt-4o,claude-3-opus" \
-  --providers "openai,anthropic" \
-  --rps 100 \
-  --duration 120s
+./benchmark -provider bifrost -users 500 -duration 600 -ramp-up -ramp-up-duration 120
 ```
 
-### 4. Streaming Test with Authentication
+### More examples
 
 ```bash
-./hitter \
-  --stream \
-  --models "gpt-4o-mini" \
-  --providers "openai" \
-  --rps 50 \
-  --duration 60s \
-  --virtual-key sk-bf-your-key-here \
-  --verbose
+# Compare two gateways back to back with large payloads
+./benchmark -provider bifrost -rate 2000 -duration 300 -big-payload -output bifrost.json
+./benchmark -provider litellm -rate 2000 -duration 300 -big-payload -output litellm.json
+
+# Quick smoke test
+./benchmark -provider bifrost -rate 100 -duration 5 -cooldown 10
+
+# High-latency backend: allow requests started late in the run to finish
+./benchmark -provider bifrost -rate 500 -duration 600 -timeout 1200
+
+# Embeddings with a large prompt file
+./benchmark -provider bifrost -request-type embedding -path embeddings \
+  -prompt-file 10kbprompt.txt -model text-embedding-3-small -rate 10 -duration 30
 ```
 
-### 5. Custom Endpoint Test
+### Payloads
 
-```bash
-./hitter \
-  --url "https://api.example.com/v1/chat/completions" \
-  --models "gpt-4o" \
-  --rps 100 \
-  --duration 30s \
-  --virtual-key sk-bf-your-key-here
+`chat` requests look like `{"messages":[{"role":"user","content":"<prompt>"}],"model":"openai/<model>"}`; `embedding` requests use `{"input":"<prompt>","model":"openai/<model>"}` (the raw OpenAI provider drops the `openai/` prefix). The request index and timestamp are prepended to every prompt to defeat prompt caching. With `-prompt-file`, the whole file becomes the prompt — `10kbprompt.txt` and `50kbprompt.txt` in the repo root are ready-made fixtures. Portkey requests automatically get an `x-portkey-config` header carrying your OpenAI key.
+
+### Output
+
+Each run writes per-provider metrics to the output file:
+
+```json
+{
+  "bifrost": {
+    "requests": 5000,
+    "success_rate": 99.8,
+    "mean_latency_ms": 45.2,
+    "p50_latency_ms": 42.1,
+    "p99_latency_ms": 156.7,
+    "max_latency_ms": 203.4,
+    "throughput_rps": 498.5,
+    "status_code_counts": { "200": 4990, "500": 10 },
+    "server_peak_memory_mb": 256.7,
+    "server_avg_memory_mb": 189.3,
+    "drop_reasons": { "HTTP 500": 10 }
+  }
+}
 ```
 
-## Important Notes
+Memory stats come from sampling the RSS of the process listening on the provider's configured port, so run the tool on the same machine as the gateways (or expect empty memory stats).
 
-### ⚠️ Flag Syntax Rules
+### Troubleshooting
 
-**Boolean Flags:**
+- **"No process found on port"** — the gateway isn't running, or the `.env` port is wrong. The benchmark still runs; only memory stats are skipped.
+- **"Attack for [Provider] timed out"** — raise `-timeout`; it must cover `duration + backend latency`.
+- **Low request counts with `-users`** — expected: total requests ≈ `users × duration / avg_latency`. High backend latency means few requests.
+- **All requests failing** — verify connectivity first: `curl -X POST http://localhost:8080/v1/chat/completions -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"Hi"}],"model":"gpt-4o-mini"}'`
 
-- ✅ Correct: `--stream` or `--stream=true`
-- ❌ Wrong: `--stream true` (will break subsequent flags)
-
-**Comma-Separated Values:**
-
-- ✅ Correct: `--models "gpt-4o,gpt-5.2,claude-3"` (quoted with spaces)
-- ✅ Correct: `--models gpt-4o,gpt-5.2,claude-3` (no spaces)
-- ❌ Wrong: `--models gpt-4o, gpt-5.2, claude-3` (spaces without quotes)
-
-**Duration Format:**
-
-- Valid: `30s`, `5m`, `1h`, `90s`, `2h30m`
-- Examples: `--duration 30s`, `--duration 5m`, `--duration 1h30m`
-
-### Test Behavior
-
-- **Random Selection**: For each request, a random model, provider, and prompt are selected from the configured options
-- **Token Variation**: Max tokens vary by ±25 tokens from the configured value
-- **Temperature Variation**: Temperature varies by ±0.1 from the configured value
-- **Graceful Shutdown**: Press `Ctrl+C` to stop the test early and see final statistics
-
-### Model/Provider Format
-
-When providers are specified, requests will use the format: `provider/model`
-
-Example:
-
-```bash
---models "gpt-4o,gpt-5.2" --providers "openai,anthropic"
-```
-
-Will generate requests like:
-
-- `openai/gpt-4o`
-- `openai/gpt-5.2`
-- `anthropic/gpt-4o`
-- `anthropic/gpt-5.2`
-
-## Output
-
-### Real-time Statistics (every 10 seconds)
+## Repo layout
 
 ```
-📈 [10s] Requests: 1000 | Success: 98.5% | RPS: 100.0
-📈 [20s] Requests: 2000 | Success: 98.7% | RPS: 100.0
+benchmark.go              # gateway comparison benchmark (documented above)
+pkg/concurrent/           # semaphore-based concurrency engine for -users mode
+hitter/                   # load generator for Bifrost — see hitter/README.md
+mocker/                   # mock LLM provider server — see mocker/README.md
+mcp-code-mode-benchmark/  # MCP Code Mode benchmark — see its README.md
+10kbprompt.txt            # prompt fixtures for -prompt-file / large-payload runs
+50kbprompt.txt
 ```
-
-### Final Statistics
-
-```
-📋 FINAL STATISTICS
-   Duration: 60.123s
-   Total Requests: 6012
-   Successful: 5934 (98.7%)
-   Errors: 78
-   Average RPS: 100.0
-```
-
-## Test Prompts
-
-The tool uses a variety of prompts including:
-
-- Technical explanations (quantum computing, machine learning, neural networks)
-- Creative writing (short stories, poems)
-- Educational content (photosynthesis, climate change)
-- Technical processes (blockchain, GPS systems)
-
-## Troubleshooting
-
-### No Requests Being Sent
-
-**Check:**
-
-- Is the URL correct and reachable?
-- Is the server running on the specified port?
-- Are you using the correct virtual key?
-
-```bash
-# Test with verbose logging
-./hitter --verbose --rps 1 --duration 10s
-```
-
-### All Requests Failing
-
-**Common causes:**
-
-- Invalid virtual key
-- Server not running
-- Wrong endpoint URL
-- Network issues
-
-**Debug:**
-
-```bash
-./hitter --verbose --rps 1 --duration 10s --virtual-key your-key
-```
-
-### Flags Not Being Recognized
-
-**Check:**
-
-- Are boolean flags formatted correctly? (use `--stream` not `--stream true`)
-- Are comma-separated values quoted if they contain spaces?
-- Are you using double dashes `--` for long flags?
-
-## Performance Tips
-
-1. **Start Small**: Begin with low RPS (10-50) and gradually increase
-2. **Use Streaming**: Streaming tests better simulate real-world usage
-3. **Monitor Server**: Watch server metrics during load tests
-4. **Timeout Settings**: Default HTTP timeout is 30 seconds
-5. **System Resources**: Ensure your system can handle the target RPS
 
 ## Contributing
 
-When modifying the tool:
-
-- Update this README with new flags or features
-- Test with various RPS and duration combinations
-- Ensure graceful shutdown works correctly
-- Add appropriate error handling
+PRs are welcome. If you add flags or change behavior in a tool, update that tool's README in the same PR — the root README only documents `benchmark.go` and links out for everything else.
 
 ## License
 
-Part of the Bifrost Enterprise project.
+Licensed under the [Apache License 2.0](LICENSE).

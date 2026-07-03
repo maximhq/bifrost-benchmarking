@@ -2,8 +2,11 @@ node_modules
 __pycache__
 myenv
 .env
+.DS_Store
 *.json
 !mcp-code-mode-benchmark/**/*.json
 mcp-code-mode-benchmark/runs/
-test*
+test-*.pdf
 10mbprompt.txt
+hitter/hitter
+benchmark
