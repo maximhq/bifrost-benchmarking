@@ -289,6 +289,8 @@ var (
 	jitter             int
 	latencyAuthKeys    string
 	tokensPerChunk     int
+	fixedInputTokens   int
+	fixedOutputTokens  int
 	bigPayload         bool
 	auth               string
 	withErrors         bool
@@ -304,28 +306,78 @@ var (
 	rateLimitedKeyMap  map[string]bool
 	startTime          time.Time
 	tpmTriggeredLogged bool
+
+	// Dynamic per-key latency behaviors:
+	// spikes = sparse latency outliers, ramp = gradual base drift, step = abrupt base change.
+	latencySpikeKeys string
+	latencyRampKeys  string
+	latencyStepKeys  string
+	spikeMap         = map[string]spikeSpec{}
+	rampMap          = map[string]int{}
+	stepMap          = map[string]stepSpec{}
 )
+
+// spikeSpec injects a latency outlier into pct% of requests by multiplying the
+// resolved latency by mult. Used to verify the LB's anomaly detector rejects
+// spikes from training rather than letting them drag the learned baseline.
+type spikeSpec struct {
+	pct  int
+	mult float64
+}
+
+// stepSpec abruptly replaces a key's base latency with toMs once atSec seconds
+// have elapsed — simulates a provider whose latency suddenly degrades.
+type stepSpec struct {
+	atSec int
+	toMs  int
+}
+
+// parseKVInt parses a "key=a:b" CSV into per-token (a,b) ints (b optional).
+func parseKVList(csv string, fn func(token string, a int, b string)) {
+	if csv == "" {
+		return
+	}
+	for _, entry := range strings.Split(csv, ",") {
+		entry = strings.TrimSpace(entry)
+		idx := strings.LastIndex(entry, "=")
+		if idx < 0 {
+			continue
+		}
+		token := strings.TrimSpace(entry[:idx])
+		aStr, bStr, _ := strings.Cut(entry[idx+1:], ":")
+		a, err := strconv.Atoi(strings.TrimSpace(aStr))
+		if err != nil {
+			continue
+		}
+		fn(token, a, strings.TrimSpace(bStr))
+	}
+}
 
 func init() {
 	flag.StringVar(&host, "host", getEnvString("MOCKER_HOST", "localhost"), "Host address to bind the mock server")
 	flag.IntVar(&port, "port", getEnvInt("MOCKER_PORT", 8000), "Port for the mock server to listen on")
 	flag.IntVar(&latency, "latency", getEnvInt("MOCKER_LATENCY", 0), "Latency in milliseconds to simulate")
 	flag.IntVar(&jitter, "jitter", getEnvInt("MOCKER_JITTER", 0), "Maximum jitter in milliseconds to add to latency (±jitter)")
-	flag.StringVar(&latencyAuthKeys, "latency-auth-keys", getEnvString("MOCKER_LATENCY_AUTH_KEYS", ""), "Comma-separated Authorization header values that get latency; entries may override the global config per key as key=latencyMs or key=latencyMs:jitterMs; other keys respond instantly (empty = all requests)")
+	flag.StringVar(&latencyAuthKeys, "latency-auth-keys", getEnvString("MOCKER_LATENCY_AUTH_KEYS", ""), "Comma-separated Authorization header values that get latency; entries may override the global config per key as key=latencyMs, key=latencyMs:jitterMs, or a percentile distribution key=p50:p90:p95:p99; other keys respond instantly (empty = all requests)")
 	flag.IntVar(&tokensPerChunk, "tokens-per-chunk", getEnvInt("MOCKER_TOKENS_PER_CHUNK", 5), "Words batched into each SSE delta when streaming (must be >=1)")
+	flag.IntVar(&fixedInputTokens, "input-tokens", getEnvInt("MOCKER_INPUT_TOKENS", -1), "Fixed input/prompt token count to report in usage (negative = random/derived per request)")
+	flag.IntVar(&fixedOutputTokens, "output-tokens", getEnvInt("MOCKER_OUTPUT_TOKENS", -1), "Fixed output/completion token count to report in usage (negative = random/derived per request)")
 	flag.BoolVar(&bigPayload, "big-payload", getEnvBool("MOCKER_BIG_PAYLOAD", false), "Use big payload")
 	flag.StringVar(&auth, "auth", getEnvString("MOCKER_AUTH", ""), "Add authentication header key")
 	flag.BoolVar(&withErrors, "with-errors", getEnvBool("MOCKER_WITH_ERRORS", false), "Enable provider-specific random error responses")
 	flag.BoolVar(&withErrors, "witherrors", getEnvBool("MOCKER_WITH_ERRORS", false), "Alias of -with-errors")
 	flag.IntVar(&failurePercent, "failure-percent", getEnvInt("MOCKER_FAILURE_PERCENT", 0), "Base failure percentage (0-100)")
 	flag.IntVar(&failureJitter, "failure-jitter", getEnvInt("MOCKER_FAILURE_JITTER", 0), "Maximum jitter in percentage points to add to failure rate (±failure-jitter)")
-	flag.StringVar(&failureAuthKeys, "failure-auth-keys", getEnvString("MOCKER_FAILURE_AUTH_KEYS", ""), "Comma-separated Authorization header values subject to the failure percentage; other keys always succeed (empty = all requests)")
+	flag.StringVar(&failureAuthKeys, "failure-auth-keys", getEnvString("MOCKER_FAILURE_AUTH_KEYS", ""), "Comma-separated Authorization header values subject to the failure percentage; entries may override the global config per key as key=percent or key=percent:jitter; other keys always succeed (empty = all requests)")
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
 	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
+	flag.StringVar(&latencySpikeKeys, "latency-spike-keys", getEnvString("MOCKER_LATENCY_SPIKE_KEYS", ""), "Per-key sparse latency spikes as key=pct:mult (e.g. 'slow-key=10:5' → 10% of requests get 5x latency). Tests outlier rejection.")
+	flag.StringVar(&latencyRampKeys, "latency-ramp-keys", getEnvString("MOCKER_LATENCY_RAMP_KEYS", ""), "Per-key linear base-latency drift in ms added per minute elapsed (e.g. 'slow-key=2000'). Tests gradual-drift tracking.")
+	flag.StringVar(&latencyStepKeys, "latency-step-keys", getEnvString("MOCKER_LATENCY_STEP_KEYS", ""), "Per-key abrupt base-latency step as key=atSec:toMs (e.g. 'slow-key=30:8000' → at 30s base jumps to 8000ms). Tests abrupt-change handling.")
 }
 
 // Helper functions to read environment variables with defaults
@@ -343,6 +395,26 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// resolveInputTokens returns the configured fixed input/prompt token count when
+// -input-tokens (MOCKER_INPUT_TOKENS) is set (>= 0); otherwise it returns the
+// supplied fallback (the existing random or request-derived value).
+func resolveInputTokens(fallback int) int {
+	if fixedInputTokens >= 0 {
+		return fixedInputTokens
+	}
+	return fallback
+}
+
+// resolveOutputTokens returns the configured fixed output/completion token count
+// when -output-tokens (MOCKER_OUTPUT_TOKENS) is set (>= 0); otherwise it returns
+// the supplied fallback (the existing random or request-derived value).
+func resolveOutputTokens(fallback int) int {
+	if fixedOutputTokens >= 0 {
+		return fixedOutputTokens
+	}
+	return fallback
 }
 
 func getEnvBool(key string, defaultValue bool) bool {
@@ -383,10 +455,51 @@ func authKeyMatches(keysCSV string, authHeader string) bool {
 	return false
 }
 
-// latencySpec is the latency configuration resolved for a single request.
+// latencySpec is the latency configuration resolved for a single request. A key
+// is configured in exactly one mode: either avg latency with optional symmetric
+// jitter (latencyMs/jitterMs), or a percentile distribution (pctl). The two are
+// mutually exclusive — pctl is non-nil only in percentile mode.
 type latencySpec struct {
 	latencyMs int
 	jitterMs  int
+	pctl      *percentileSpec
+}
+
+// percentileSpec describes a per-key latency distribution by its p50/p90/p95/p99
+// quantiles (ms). Per-request latencies are drawn so that, over many requests,
+// the observed percentiles converge to these values — see sample.
+type percentileSpec struct {
+	p50, p90, p95, p99 int
+}
+
+// lerp linearly interpolates between a and b at t in [0,1].
+func lerp(a, b int, t float64) int {
+	return a + int(float64(b-a)*t+0.5)
+}
+
+// sample draws one latency (ms) from the distribution defined by the quantiles,
+// treating them as points on the inverse CDF and interpolating linearly between
+// adjacent breakpoints. A uniform draw u maps to the matching segment so the
+// empirical p50/p90/p95/p99 reproduce the configured values. The body below p50
+// is mirrored about p50 (floored at 0) to give the bulk a plausible spread.
+func (p percentileSpec) sample() int {
+	u := rand.Float64()
+	switch {
+	case u < 0.5:
+		low := 2*p.p50 - p.p90
+		if low < 0 {
+			low = 0
+		}
+		return lerp(low, p.p50, u/0.5)
+	case u < 0.9:
+		return lerp(p.p50, p.p90, (u-0.5)/0.4)
+	case u < 0.95:
+		return lerp(p.p90, p.p95, (u-0.9)/0.05)
+	case u < 0.99:
+		return lerp(p.p95, p.p99, (u-0.95)/0.04)
+	default:
+		return p.p99
+	}
 }
 
 // actualMs returns the latency to apply for one request, with jitter
@@ -402,28 +515,81 @@ func (s latencySpec) actualMs() int {
 	return actual
 }
 
+// computeLatencyMs resolves the final latency for one request, layering the
+// dynamic per-key behaviors on top of the static spec: abrupt step and linear
+// ramp adjust the BASE (so they shift the true distribution the LB should
+// learn), then symmetric jitter is rolled in, and finally a sparse spike may
+// multiply the result (an outlier the LB should reject, not learn).
+func computeLatencyMs(token string, spec latencySpec) int {
+	var actual int
+	if spec.pctl != nil {
+		// Percentile mode: draw from the configured distribution. Step/ramp,
+		// which shift a single base value, don't apply here.
+		actual = spec.pctl.sample()
+	} else {
+		base := spec.latencyMs
+		if st, ok := stepMap[token]; ok && !startTime.IsZero() && int(time.Since(startTime).Seconds()) >= st.atSec {
+			base = st.toMs
+		}
+		if perMin, ok := rampMap[token]; ok && !startTime.IsZero() {
+			base += int(time.Since(startTime).Minutes() * float64(perMin))
+		}
+		actual = base
+		if spec.jitterMs > 0 {
+			actual += rand.Intn(2*spec.jitterMs+1) - spec.jitterMs
+		}
+	}
+	if sp, ok := spikeMap[token]; ok && sp.pct > 0 && rand.Intn(100) < sp.pct {
+		actual = int(float64(actual) * sp.mult)
+	}
+	if actual < 0 {
+		actual = 0
+	}
+	return actual
+}
+
 // parseLatencyEntry splits one -latency-auth-keys entry into its key and an
-// optional "=latencyMs" / "=latencyMs:jitterMs" override. The split happens at
-// the last '=' only when its right side parses as numbers, so keys containing
-// '=' (e.g. base64 padding) still work as bare entries.
+// optional override after the last '='. The override is colon-separated and its
+// field count selects the mode (mutually exclusive):
+//   - "latencyMs"                       -> avg latency, no jitter
+//   - "latencyMs:jitterMs"              -> avg latency with symmetric jitter
+//   - "p50:p90:p95:p99"                 -> percentile distribution (ascending)
+//
+// A 3-field override is ambiguous and rejected. The split happens at the last
+// '=' only when its right side parses as a valid override, so keys containing
+// '=' (e.g. base64 padding) still work as bare entries; anything that fails to
+// parse degrades to a bare key.
 func parseLatencyEntry(entry string) (key string, spec latencySpec, hasSpec bool) {
 	idx := strings.LastIndex(entry, "=")
 	if idx < 0 {
 		return entry, latencySpec{}, false
 	}
-	latStr, jitStr, hasJitter := strings.Cut(entry[idx+1:], ":")
-	lat, err := strconv.Atoi(latStr)
-	if err != nil || lat < 0 {
-		return entry, latencySpec{}, false
-	}
-	jit := 0
-	if hasJitter {
-		jit, err = strconv.Atoi(jitStr)
-		if err != nil || jit < 0 {
+	key = strings.TrimSpace(entry[:idx])
+	fields := strings.Split(entry[idx+1:], ":")
+	vals := make([]int, len(fields))
+	for i, f := range fields {
+		v, err := strconv.Atoi(f)
+		if err != nil || v < 0 {
 			return entry, latencySpec{}, false
 		}
+		vals[i] = v
 	}
-	return strings.TrimSpace(entry[:idx]), latencySpec{latencyMs: lat, jitterMs: jit}, true
+	switch len(vals) {
+	case 1:
+		return key, latencySpec{latencyMs: vals[0]}, true
+	case 2:
+		return key, latencySpec{latencyMs: vals[0], jitterMs: vals[1]}, true
+	case 4:
+		if !(vals[0] <= vals[1] && vals[1] <= vals[2] && vals[2] <= vals[3]) {
+			return entry, latencySpec{}, false
+		}
+		return key, latencySpec{
+			latencyMs: vals[0],
+			pctl:      &percentileSpec{p50: vals[0], p90: vals[1], p95: vals[2], p99: vals[3]},
+		}, true
+	default:
+		return entry, latencySpec{}, false
+	}
 }
 
 // resolveLatencySpec returns the latency/jitter configuration for the request's
@@ -459,37 +625,98 @@ func simulateLatency(authHeader string) {
 	if !ok {
 		return
 	}
-	if actual := spec.actualMs(); actual > 0 {
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if actual := computeLatencyMs(token, spec); actual > 0 {
 		time.Sleep(time.Duration(actual) * time.Millisecond)
 	}
 }
 
+// failureSpec is the failure configuration resolved for a single request.
+type failureSpec struct {
+	percent int
+	jitter  int
+}
+
+// shouldFailNow rolls the dice for one request using percent ±jitter (clamped to
+// the 0-100 range) and reports whether this request should fail.
+func (s failureSpec) shouldFailNow() bool {
+	actual := s.percent
+	if s.jitter > 0 {
+		actual += rand.Intn(2*s.jitter+1) - s.jitter
+		if actual < 0 {
+			actual = 0
+		}
+		if actual > 100 {
+			actual = 100
+		}
+	}
+	return actual > 0 && rand.Intn(100) < actual
+}
+
+// parseFailureEntry splits one -failure-auth-keys entry into its key and an
+// optional "=percent" / "=percent:jitter" override. Mirrors parseLatencyEntry:
+// the split happens at the last '=' only when its right side parses as numbers,
+// so keys containing '=' (e.g. base64 padding) still work as bare entries.
+func parseFailureEntry(entry string) (key string, spec failureSpec, hasSpec bool) {
+	idx := strings.LastIndex(entry, "=")
+	if idx < 0 {
+		return entry, failureSpec{}, false
+	}
+	pctStr, jitStr, hasJitter := strings.Cut(entry[idx+1:], ":")
+	pct, err := strconv.Atoi(pctStr)
+	if err != nil || pct < 0 {
+		return entry, failureSpec{}, false
+	}
+	jit := 0
+	if hasJitter {
+		jit, err = strconv.Atoi(jitStr)
+		if err != nil || jit < 0 {
+			return entry, failureSpec{}, false
+		}
+	}
+	return strings.TrimSpace(entry[:idx]), failureSpec{percent: pct, jitter: jit}, true
+}
+
+// resolveFailureSpec returns the failure percent/jitter for the request's
+// Authorization header and whether the request is subject to failures at all.
+// An empty key list matches every request with the global
+// -failure-percent/-failure-jitter. Listed keys may be bare ("key-A", globals
+// apply) or carry a per-key override ("key-A=10" or "key-A=10:5"); non-listed
+// keys always succeed. The "Bearer " prefix is stripped before comparison, same
+// as authKeyMatches.
+func resolveFailureSpec(keysCSV string, authHeader string) (failureSpec, bool) {
+	if keysCSV == "" {
+		return failureSpec{percent: failurePercent, jitter: failureJitter}, true
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	for _, entry := range strings.Split(keysCSV, ",") {
+		key, spec, hasSpec := parseFailureEntry(strings.TrimSpace(entry))
+		if key != token {
+			continue
+		}
+		if hasSpec {
+			return spec, true
+		}
+		return failureSpec{percent: failurePercent, jitter: failureJitter}, true
+	}
+	return failureSpec{}, false
+}
+
 // shouldFail checks if request should fail based on failure percentage with jitter.
 // When -failure-auth-keys is set, only requests carrying one of those keys are
-// subject to the failure rate; everything else always succeeds.
+// subject to the failure rate; everything else always succeeds. Listed keys may
+// carry a per-key override ("key-A=10:5") to use a different rate than the global
+// -failure-percent/-failure-jitter.
 func shouldFail(authHeader string) bool {
 	if withErrors {
 		// In with-errors mode, use provider-specific random errors only.
 		return false
 	}
-	if !authKeyMatches(failureAuthKeys, authHeader) {
+	spec, ok := resolveFailureSpec(failureAuthKeys, authHeader)
+	if !ok {
 		return false
 	}
-	if failurePercent > 0 {
-		actualFailurePercent := failurePercent
-		if failureJitter > 0 {
-			jitterOffset := rand.Intn(2*failureJitter+1) - failureJitter
-			actualFailurePercent += jitterOffset
-			if actualFailurePercent < 0 {
-				actualFailurePercent = 0
-			}
-			if actualFailurePercent > 100 {
-				actualFailurePercent = 100
-			}
-		}
-		return actualFailurePercent > 0 && rand.Intn(100) < actualFailurePercent
-	}
-	return false
+	return spec.shouldFailNow()
 }
 
 func effectiveFailurePercent() int {
@@ -729,7 +956,8 @@ func getStreamTotalLatency(authHeader string) time.Duration {
 	if !ok {
 		return 0
 	}
-	actual := spec.actualMs()
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	actual := computeLatencyMs(token, spec)
 	if actual <= 0 {
 		return 0
 	}
@@ -974,7 +1202,7 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 				"stop_sequence": nil,
 			},
 			"usage": map[string]any{
-				"output_tokens": len(words),
+				"output_tokens": resolveOutputTokens(len(words)),
 			},
 		})
 		writeSSEJSON(w, "message_stop", map[string]any{
@@ -1070,12 +1298,14 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 				"stopReason": "end_turn",
 			},
 		})
+		streamInputTokens := resolveInputTokens(rand.Intn(1000))
+		streamOutputTokens := resolveOutputTokens(len(words))
 		writeSSEJSON(w, "", map[string]any{
 			"metadata": map[string]any{
 				"usage": map[string]any{
-					"inputTokens":  rand.Intn(1000),
-					"outputTokens": len(words),
-					"totalTokens":  rand.Intn(1000) + len(words),
+					"inputTokens":  streamInputTokens,
+					"outputTokens": streamOutputTokens,
+					"totalTokens":  streamInputTokens + streamOutputTokens,
 				},
 			},
 		})
@@ -1136,8 +1366,8 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		FinishReason: StrPtr("stop"),
 	}
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	mockResp := OpenAIChatCompletionsResponse{
 		ID:      "cmpl-mock12345",
@@ -1193,8 +1423,8 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		mockContent = strings.Repeat(mockContent, 182)
 	}
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	resp := OpenAIResponsesResponse{
 		ID:      "resp-mock12345",
@@ -1282,7 +1512,7 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	randomPromptTokens := rand.Intn(100) + 1
+	randomPromptTokens := resolveInputTokens(rand.Intn(100) + 1)
 
 	resp := OpenAIEmbeddingsResponse{
 		Object: "list",
@@ -1340,8 +1570,8 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	resp := AnthropicMessageResponse{
 		ID:           "msg_mock12345",
@@ -1404,8 +1634,8 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 
 	resp := GenAIResponse{
 		Candidates: []GenAICandidate{
@@ -1472,8 +1702,8 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
-	randomInputTokens := rand.Intn(1000)
-	randomOutputTokens := rand.Intn(1000)
+	randomInputTokens := resolveInputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
 	resp := BedrockConverseResponse{
 		Output: BedrockConverseOutput{
 			Message: BedrockMessage{
@@ -1689,6 +1919,27 @@ func main() {
 		log.Printf("Per-key rate limiting enabled for %d key(s)", len(rateLimitedKeyMap))
 	}
 
+	// Parse dynamic per-key latency behaviors.
+	parseKVList(latencySpikeKeys, func(token string, pct int, b string) {
+		mult := 5.0
+		if b != "" {
+			if m, err := strconv.ParseFloat(b, 64); err == nil {
+				mult = m
+			}
+		}
+		spikeMap[token] = spikeSpec{pct: pct, mult: mult}
+		log.Printf("Latency spikes for %q: %d%% of requests x%.1f", token, pct, mult)
+	})
+	parseKVList(latencyRampKeys, func(token string, perMin int, _ string) {
+		rampMap[token] = perMin
+		log.Printf("Latency ramp for %q: +%dms per minute", token, perMin)
+	})
+	parseKVList(latencyStepKeys, func(token string, atSec int, b string) {
+		toMs, _ := strconv.Atoi(b)
+		stepMap[token] = stepSpec{atSec: atSec, toMs: toMs}
+		log.Printf("Latency step for %q: at %ds base -> %dms", token, atSec, toMs)
+	})
+
 	addr := fmt.Sprintf("%s:%d", host, port)
 	if jitter > 0 {
 		log.Printf("Mock LLM server (fasthttp) starting on %s with latency %dms ±%dms jitter...\n", addr, latency, jitter)
@@ -1700,6 +1951,12 @@ func main() {
 	}
 	if failureAuthKeys != "" {
 		log.Printf("Failure simulation will only apply to requests with auth keys: %s", failureAuthKeys)
+	}
+	if fixedInputTokens >= 0 {
+		log.Printf("Reporting a fixed input token count of %d in usage", fixedInputTokens)
+	}
+	if fixedOutputTokens >= 0 {
+		log.Printf("Reporting a fixed output token count of %d in usage", fixedOutputTokens)
 	}
 	if tpm > 0 {
 		if tpmDuration > 0 {
