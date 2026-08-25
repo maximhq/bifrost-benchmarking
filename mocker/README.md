@@ -12,6 +12,9 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Anthropic Messages API Support**: Supports `POST /anthropic/v1/messages` (and `/anthropic/messages`)
 - **GenAI API Support**: Supports `POST /models/{model}:generateContent`, `POST /v1beta/models/{model}:generateContent`, `POST /v1/models/{model}:generateContent`, and `/genai/...` equivalents, including `:streamGenerateContent`
 - **Bedrock Converse API Support**: Supports `POST /model/{model}/converse` and `POST /model/{model}/converse-stream` (also with `/bedrock` prefix)
+- **OpenAI Batch API Support**: Full `/v1/batches` lifecycle — create, retrieve, list, cancel — plus the `/v1/files` endpoints batches use for input and results, matching OpenAI's object shapes, status vocabulary, and JSONL output format
+- **Anthropic Message Batches API Support**: Full `/v1/messages/batches` lifecycle — create, retrieve, list, cancel, delete, and `/results` — matching Anthropic's object shapes, `processing_status` values, and JSONL results format
+- **Batch Progress Simulation**: `-batch-completion-ms` makes a batch walk its real status progression over a configurable wall-clock window (so polling loops can be exercised), and `-batch-failure-percent` mixes per-request errors into the results
 - **Provider Prefix Support**: Accepts provider-prefixed models like `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`, `vertex/gemini-2.0-flash`, `genai/gemini-2.0-flash`, etc.
 - **Provider-Specific Error Simulation**: `-with-errors` (or `-witherrors`) returns random provider-native error payloads/codes while keeping a success/error mix
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
@@ -48,7 +51,7 @@ Navigate to the `mocker` directory and use `go run`:
 cd mocker
 
 # Run the mock server (default: port 8000, 0ms latency)
-go run main.go
+go run .
 ```
 
 ### 2. Advanced Usage Examples
@@ -56,28 +59,28 @@ go run main.go
 **Basic latency simulation:**
 
 ```bash
-go run main.go -port 8080 -latency 100
+go run . -port 8080 -latency 100
 # Runs on port 8080 with 100ms fixed latency
 ```
 
 **Realistic network conditions with jitter:**
 
 ```bash
-go run main.go -port 8080 -latency 50 -jitter 20
+go run . -port 8080 -latency 50 -jitter 20
 # 50ms base latency with ±20ms random jitter (30-70ms range)
 ```
 
 **Per-key latency targeting:**
 
 ```bash
-go run main.go -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A,key-B"
+go run . -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A,key-B"
 # Only key-A and key-B sleep 500ms ±100ms; all other keys respond instantly
 
-go run main.go -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A=200,key-B=800:300,key-C"
+go run . -port 8080 -latency 500 -jitter 100 -latency-auth-keys "key-A=200,key-B=800:300,key-C"
 # Per-key overrides: key-A gets fixed 200ms, key-B gets 800ms ±300ms,
 # key-C falls back to the global 500ms ±100ms; all other keys respond instantly
 
-go run main.go -port 8080 -latency-auth-keys "key-A=200:400:600:1200"
+go run . -port 8080 -latency-auth-keys "key-A=200:400:600:1200"
 # Percentile mode: key-A's latency is sampled so that, over many requests, the
 # observed p50≈200ms, p90≈400ms, p95≈600ms, p99≈1200ms (a realistic long tail).
 # Per key you pick ONE mode — avg(:jitter) OR p50:p90:p95:p99; they don't combine.
@@ -90,15 +93,15 @@ over time or by chance — useful for verifying how a gateway's load balancer or
 anomaly detector reacts to spikes, drift, and sudden degradation.
 
 ```bash
-go run main.go -port 8080 -latency 500 -latency-auth-keys "spiky-key" -latency-spike-keys "spiky-key=10:5"
+go run . -port 8080 -latency 500 -latency-auth-keys "spiky-key" -latency-spike-keys "spiky-key=10:5"
 # 10% of spiky-key requests get 5x latency (an outlier the LB should reject, not learn).
 # The multiplier is optional and defaults to 5 (e.g. "spiky-key=10" → 10% at 5x).
 
-go run main.go -port 8080 -latency 1000 -latency-auth-keys "drift-key" -latency-ramp-keys "drift-key=2000"
+go run . -port 8080 -latency 1000 -latency-auth-keys "drift-key" -latency-ramp-keys "drift-key=2000"
 # drift-key's base latency rises linearly by +2000ms for every minute elapsed
 # (1000ms at start, ~3000ms after 1 min, ~5000ms after 2 min). Tests gradual-drift tracking.
 
-go run main.go -port 8080 -latency 1000 -latency-auth-keys "step-key" -latency-step-keys "step-key=30:8000"
+go run . -port 8080 -latency 1000 -latency-auth-keys "step-key" -latency-step-keys "step-key=30:8000"
 # step-key responds at the base latency until 30s have elapsed, then its base
 # abruptly jumps to 8000ms. Tests abrupt-change handling.
 ```
@@ -110,38 +113,38 @@ once (or the same key for combined effects).
 **Large payload testing:**
 
 ```bash
-go run main.go -port 8080 -big-payload
+go run . -port 8080 -big-payload
 # Returns ~10KB responses instead of small ones
 ```
 
 **Full simulation:**
 
 ```bash
-go run main.go -port 8080 -latency 75 -jitter 25 -big-payload
+go run . -port 8080 -latency 75 -jitter 25 -big-payload
 # Comprehensive testing setup with variable latency and large payloads
 ```
 
 **With authentication:**
 
 ```bash
-go run main.go -port 8080 -auth "Bearer my-secret-key"
+go run . -port 8080 -auth "Bearer my-secret-key"
 # Requires Authorization header: "Bearer my-secret-key"
 ```
 
 **Failure rate simulation:**
 
 ```bash
-go run main.go -port 8080 -failure-percent 10 -failure-jitter 5
+go run . -port 8080 -failure-percent 10 -failure-jitter 5
 # 10% base failure rate with ±5% jitter (5-15% failure range)
 ```
 
 **Per-key failure targeting:**
 
 ```bash
-go run main.go -port 8080 -failure-percent 10 -failure-auth-keys "key-A,key-B"
+go run . -port 8080 -failure-percent 10 -failure-auth-keys "key-A,key-B"
 # Only key-A and key-B fail at 10%; all other keys always succeed
 
-go run main.go -port 8080 -failure-auth-keys "slow-key=2,fast-key=10:3,key-C"
+go run . -port 8080 -failure-auth-keys "slow-key=2,fast-key=10:3,key-C"
 # Per-key overrides: slow-key fails 2%, fast-key fails 10% ±3%,
 # key-C falls back to the global -failure-percent; all other keys always succeed
 ```
@@ -149,46 +152,46 @@ go run main.go -port 8080 -failure-auth-keys "slow-key=2,fast-key=10:3,key-C"
 **Rate limiting simulation (TPM):**
 
 ```bash
-go run main.go -port 8080 -tpm 30
+go run . -port 8080 -tpm 30
 # Returns 429 responses after 30 seconds to simulate rate limits (stays on forever)
 
-go run main.go -port 8080 -tpm 30 -tpm-duration 60
+go run . -port 8080 -tpm 30 -tpm-duration 60
 # Returns 429 responses only between 30s and 90s, then recovers
 
-go run main.go -port 8080 -tpm 30 -tpm-auth-keys "key-A,key-B"
+go run . -port 8080 -tpm 30 -tpm-auth-keys "key-A,key-B"
 # Only key-A and key-B requests get rate-limited; all other keys are unaffected
 
-go run main.go -port 8080 -tpm 30 -tpm-duration 60 -tpm-auth-keys "Bearer key-A"
+go run . -port 8080 -tpm 30 -tpm-duration 60 -tpm-auth-keys "Bearer key-A"
 # key-A requests are rate-limited between 30s and 90s only
 ```
 
 **Complete testing setup:**
 
 ```bash
-go run main.go -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -tpm 60 -tpm-duration 30 -big-payload
+go run . -port 8080 -latency 50 -jitter 20 -auth "Bearer test-key" -failure-percent 5 -failure-jitter 2 -tpm 60 -tpm-duration 30 -big-payload
 # Full-featured mock server with latency, jitter, auth, failure simulation, rate limiting window, and large payloads
 ```
 
 **With raw request/response logging:**
 
 ```bash
-go run main.go -port 8000 -log-raw
+go run . -port 8000 -log-raw
 # Logs raw HTTP requests and responses for debugging
 ```
 
 **Streaming responses for chat completions:**
 
 ```bash
-go run main.go -port 8080 -latency 5000
+go run . -port 8080 -latency 5000
 # Send a request with {"stream": true} to get server-sent event stream.
 # Total stream wall-clock matches -latency (deadline-based scheduling); each
 # SSE delta batches -tokens-per-chunk words (default 5).
 
-go run main.go -port 8080 -latency 5000 -tokens-per-chunk 1
+go run . -port 8080 -latency 5000 -tokens-per-chunk 1
 # One word per chunk — ~5x more SSE events on the wire; useful for stressing
 # per-chunk parsing.
 
-go run main.go -port 8080 -latency 5000 -tokens-per-chunk 20 -big-payload
+go run . -port 8080 -latency 5000 -tokens-per-chunk 20 -big-payload
 # Fewer, fatter chunks (~20 words each) — closer to how OpenAI/Anthropic
 # actually batch streaming deltas in production.
 ```
@@ -237,6 +240,8 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_TPM`: Seconds after which to trigger TPM (429) scenarios (default: `0`, disabled)
 - `MOCKER_TPM_DURATION`: Duration in seconds for the TPM window; TPM is active from `MOCKER_TPM` to `MOCKER_TPM + MOCKER_TPM_DURATION` seconds (default: `0`, active until server stop)
 - `MOCKER_TPM_AUTH_KEYS`: Comma-separated bearer token values that trigger TPM; the `Bearer ` prefix is stripped automatically before comparison, so pass raw tokens (e.g. `key-A,key-B`); other keys are unaffected (default: `""`, all requests)
+- `MOCKER_BATCH_COMPLETION_MS`: Wall-clock milliseconds a submitted batch takes to reach a terminal status (default: `0`, completes immediately)
+- `MOCKER_BATCH_FAILURE_PERCENT`: Percentage 0-100 of the requests inside a batch that come back as per-request errors (default: `0`)
 - `MOCKER_LOG_RAW`: Log raw HTTP requests and responses - set to `true`, `1`, `false`, or `0` (default: `false`)
 
 **Example using environment variables:**
@@ -250,7 +255,7 @@ export MOCKER_AUTH="Bearer my-secret-key"
 export MOCKER_TPM=60
 export MOCKER_TPM_DURATION=30
 export MOCKER_TPM_AUTH_KEYS="key-A,key-B"
-go run main.go
+go run .
 ```
 
 **Example in Docker:**
@@ -306,6 +311,8 @@ services:
 - `-tpm <seconds>`: Seconds after which to trigger TPM (429) scenarios (default: `0`, disabled)
 - `-tpm-duration <seconds>`: Duration in seconds for the TPM window. TPM is active from `-tpm` to `-tpm + -tpm-duration` seconds; after the window closes requests succeed again (default: `0`, active until server stop)
 - `-tpm-auth-keys <keys>`: Comma-separated bearer token values that should be rate-limited. The `Bearer ` prefix is stripped automatically before comparison, so pass the raw token (e.g. `"key-A,key-B"`). Requests with any other key are unaffected (default: `""`, all requests)
+- `-batch-completion-ms <milliseconds>`: Wall-clock a submitted batch takes to reach a terminal status. `0` completes it immediately; any positive value walks it through the real status progression over that window (default: `0`)
+- `-batch-failure-percent <percentage>`: Percentage (0-100) of the requests inside a batch that come back as per-request errors, written to the error file (OpenAI) or as `errored` results (Anthropic). Failures are spread evenly across the batch (default: `0`)
 - `-log-raw`: Log raw HTTP request and response bodies for debugging and inspection (default: `false`)
 
 **Note:** Command-line flags override environment variables. If `-auth` is set to an empty string (`-auth ""`), authentication is disabled. Otherwise, all requests must include the exact authentication header value.
@@ -378,6 +385,124 @@ Returns responses in Anthropic messages format.
 - `POST /model/{model}/converse-stream` - Bedrock-compatible streaming converse endpoint
 - `POST /bedrock/model/{model}/converse` - Same endpoint with `/bedrock` prefix
 - `POST /bedrock/model/{model}/converse-stream` - Same streaming endpoint with `/bedrock` prefix
+
+### OpenAI Batch API
+
+- `POST /v1/batches` - Create a batch from an uploaded JSONL input file
+- `GET /v1/batches` - List batches, newest first (`limit`, `after`)
+- `GET /v1/batches/{batch_id}` - Retrieve a batch
+- `POST /v1/batches/{batch_id}/cancel` - Cancel a batch
+
+All four also answer on `/batches/...`, `/openai/batches/...`, and `/openai/v1/batches/...`.
+
+Batches are backed by the Files API, exactly like the real one:
+
+- `POST /v1/files` - Upload the JSONL input (`multipart/form-data` with `file` and `purpose`)
+- `GET /v1/files` - List files (`purpose`, `limit`, `after`)
+- `GET /v1/files/{file_id}` - Retrieve a file object
+- `GET /v1/files/{file_id}/content` - Download a file — this is how batch results are read
+- `DELETE /v1/files/{file_id}` - Delete a file
+
+Files live in memory for the lifetime of the process; nothing is written to disk.
+
+The batch object carries every field the real API returns, using `null` for the
+ones that do not apply yet, and moves through the same statuses:
+`validating` → `in_progress` → `finalizing` → `completed`, plus `cancelling`,
+`cancelled`, `failed`, and `expired`. `request_counts` advances as the batch
+progresses, and once it reaches a terminal status the mocker generates the
+`output_file_id` (and `error_file_id`, when some requests failed) whose contents
+are JSONL, one line per request:
+
+```json
+{"id":"batch_req_...","custom_id":"request-1","response":{"status_code":200,"request_id":"req_...","body":{"id":"chatcmpl-...","object":"chat.completion","choices":[...],"usage":{...}}},"error":null}
+```
+
+The generated body matches the batch's `endpoint`, so `/v1/chat/completions`,
+`/v1/embeddings`, `/v1/completions`, and `/v1/responses` batches each return the
+response shape their endpoint would have produced.
+
+Input files are validated the way OpenAI validates them: an unparseable line, a
+missing or duplicate `custom_id`, a `url` that disagrees with the batch endpoint,
+or an empty file puts the batch straight into `failed` with a populated `errors`
+list (each entry carrying `code`, `message`, `param`, and `line`).
+
+**Example:**
+
+```bash
+# 1. Upload the input file
+curl -s -X POST http://localhost:8000/v1/files \
+  -F purpose=batch -F file=@requests.jsonl
+
+# 2. Create the batch
+curl -s -X POST http://localhost:8000/v1/batches \
+  -H 'Content-Type: application/json' \
+  -d '{"input_file_id":"file-abc","endpoint":"/v1/chat/completions","completion_window":"24h"}'
+
+# 3. Poll it, then download the output file
+curl -s http://localhost:8000/v1/batches/batch_abc
+curl -s http://localhost:8000/v1/files/file-out/content
+```
+
+### Anthropic Message Batches API
+
+- `POST /v1/messages/batches` - Create a batch from inline `requests`
+- `GET /v1/messages/batches` - List batches, newest first (`limit`, `after_id`, `before_id`)
+- `GET /v1/messages/batches/{batch_id}` - Retrieve a batch
+- `POST /v1/messages/batches/{batch_id}/cancel` - Cancel a batch
+- `DELETE /v1/messages/batches/{batch_id}` - Delete a batch that has ended
+- `GET /v1/messages/batches/{batch_id}/results` - Stream results as JSONL
+
+All of them also answer on `/messages/batches/...`, `/anthropic/messages/batches/...`,
+and `/anthropic/v1/messages/batches/...`.
+
+The message batch object matches Anthropic's: `id`, `type: "message_batch"`,
+`processing_status` (`in_progress` → `canceling` → `ended`), the five-way
+`request_counts` (`processing`, `succeeded`, `errored`, `canceled`, `expired`),
+RFC 3339 `created_at` / `expires_at` / `ended_at` / `cancel_initiated_at` /
+`archived_at`, and a `results_url` that is populated once the batch has ended and
+points back at this mocker. Results are JSONL, one line per submitted request, in
+submission order:
+
+```json
+{"custom_id":"my-request","result":{"type":"succeeded","message":{"id":"msg_...","type":"message","role":"assistant","content":[{"type":"text","text":"..."}],"usage":{...}}}}
+```
+
+Result types cover `succeeded`, `errored` (carrying Anthropic's nested error
+envelope), `canceled` for requests that never ran because the batch was
+cancelled, and `expired`. Asking for results before the batch has ended returns
+Anthropic's `404 not_found_error`.
+
+**Example:**
+
+```bash
+BATCH=$(curl -s -X POST http://localhost:8000/v1/messages/batches \
+  -H 'Content-Type: application/json' \
+  -d '{"requests":[{"custom_id":"req-1","params":{"model":"claude-3-5-sonnet-latest","max_tokens":64,"messages":[{"role":"user","content":"Hi"}]}}]}')
+
+curl -s "http://localhost:8000/v1/messages/batches/msgbatch_abc/results"
+```
+
+### Simulating Batch Progress
+
+By default a batch is terminal the moment it is created, which keeps smoke tests
+to a single round trip. Give it a window to watch the real lifecycle instead:
+
+```bash
+# A batch takes 30s to finish; 10% of the requests inside it come back as errors
+go run . -batch-completion-ms 30000 -batch-failure-percent 10
+```
+
+Within that window the batch spends the first 10% `validating`, the next 80%
+`in_progress` (with `request_counts` climbing steadily), and the last 10%
+`finalizing`. Status is derived from elapsed time rather than a background
+worker, so polling is deterministic and cheap. Cancelling mid-flight freezes the
+counts where they stood, holds `cancelling` / `canceling` for a tenth of the
+window, then settles into `cancelled` / `ended` — with results still available
+for whatever had already finished.
+
+The batch and file endpoints honor `-auth`, `-latency`, `-failure-percent`,
+`-with-errors`, and the TPM/rate-limit flags just like the inference endpoints,
+and report those errors in each provider's own error format.
 
 **Note:** All endpoints support the same configuration flags (latency, jitter, auth, failure simulation, etc.) and require the same authentication header if `-auth` is set. The `/health` endpoint does not require authentication and does not simulate latency or failures.
 
@@ -528,16 +653,16 @@ Three flags control TPM (429) simulation:
 
 ```bash
 # All requests rate-limited after 30 s
-go run main.go -tpm 30
+go run . -tpm 30
 
 # Rate-limited only between 30 s and 90 s, then recovers
-go run main.go -tpm 30 -tpm-duration 60
+go run . -tpm 30 -tpm-duration 60
 
 # Only key-A and key-B are rate-limited after 30 s
-go run main.go -tpm 30 -tpm-auth-keys "key-A,key-B"
+go run . -tpm 30 -tpm-auth-keys "key-A,key-B"
 
 # key-A rate-limited in a 60 s window starting at 30 s; key-B and others unaffected
-go run main.go -tpm 30 -tpm-duration 60 -tpm-auth-keys "key-A"
+go run . -tpm 30 -tpm-duration 60 -tpm-auth-keys "key-A"
 ```
 
 Rate-limited requests return a `429 Too Many Requests` response:
@@ -671,7 +796,7 @@ The `-log-raw` flag enables detailed logging of raw HTTP requests and responses 
 **Example:**
 
 ```bash
-go run main.go -port 8000 -log-raw
+go run . -port 8000 -log-raw
 ```
 
 When enabled, the server logs raw request details:
