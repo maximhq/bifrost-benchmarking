@@ -97,7 +97,13 @@ func parseProviderAndModel(rawModel string) (provider string, model string) {
 func parseModelFromRequest(ctx *fasthttp.RequestCtx) (provider string, model string, stream bool) {
 	var req GenericRequest
 	if err := sonic.Unmarshal(ctx.Request.Body(), &req); err != nil {
-		return "", "gpt-4o-mini", false
+		provider, model = parseProviderAndModel(azureDeploymentModel(ctx))
+		return provider, model, false
+	}
+	// Azure clients address the deployment in the URL and leave "model" out of
+	// the body, so fall back to whatever the path named.
+	if strings.TrimSpace(req.Model) == "" {
+		req.Model = azureDeploymentModel(ctx)
 	}
 	provider, model = parseProviderAndModel(req.Model)
 	return provider, model, req.Stream
@@ -312,6 +318,12 @@ var (
 	batchCompletionMs   int
 	batchFailurePercent int
 
+	// Azure model router simulation: which deployment names behave as a router,
+	// which models it may pick, and how it picks between them.
+	modelRouterNames    string
+	modelRouterModels   string
+	modelRouterStrategy string
+
 	// Dynamic per-key latency behaviors:
 	// spikes = sparse latency outliers, ramp = gradual base drift, step = abrupt base change.
 	latencySpikeKeys string
@@ -379,7 +391,10 @@ func init() {
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
 	flag.IntVar(&batchCompletionMs, "batch-completion-ms", getEnvInt("MOCKER_BATCH_COMPLETION_MS", 0), "Wall-clock milliseconds a submitted batch takes to reach a terminal status (0 = completes immediately)")
 	flag.IntVar(&batchFailurePercent, "batch-failure-percent", getEnvInt("MOCKER_BATCH_FAILURE_PERCENT", 0), "Percentage of the requests inside a batch that come back as per-request errors (0-100)")
-	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
+	flag.StringVar(&modelRouterNames, "model-router-names", getEnvString("MOCKER_MODEL_ROUTER_NAMES", "model-router"), "Comma-separated model/deployment names that behave as an Azure model router: the response reports the model the router picked instead of this name")
+	flag.StringVar(&modelRouterModels, "model-router-models", getEnvString("MOCKER_MODEL_ROUTER_MODELS", "gpt-5-nano=55,gpt-5-mini=25,gpt-5-chat=10,gpt-5=10"), "Comma-separated models the router may pick, each optionally weighted as model=weight (default weight 1); list them cheapest first for -model-router-strategy prompt-size")
+	flag.StringVar(&modelRouterStrategy, "model-router-strategy", getEnvString("MOCKER_MODEL_ROUTER_STRATEGY", "random"), "How the router picks a model: random (weighted), round-robin, or prompt-size (larger request bodies escalate to models listed later)")
+	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash,model-router"), "Comma-separated model ids returned by GET /v1/models")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
 	flag.StringVar(&latencySpikeKeys, "latency-spike-keys", getEnvString("MOCKER_LATENCY_SPIKE_KEYS", ""), "Per-key sparse latency spikes as key=pct:mult (e.g. 'slow-key=10:5' → 10% of requests get 5x latency). Tests outlier rejection.")
@@ -1344,6 +1359,12 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		log.Printf("[chat/completions] model=%s stream=%v", model, stream)
 	}
 
+	// A model router deployment answers as whichever model it picked.
+	if routedModel, routed := resolveRoutedModel(ctx, model); routed {
+		log.Printf("[chat/completions] router=%s selected model=%s", model, routedModel)
+		model = routedModel
+	}
+
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
 		mockContent = strings.Repeat(mockContent, 182)
@@ -1421,6 +1442,11 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		log.Printf("[responses] provider=%s model=%s", provider, model)
 	} else {
 		log.Printf("[responses] model=%s", model)
+	}
+
+	if routedModel, routed := resolveRoutedModel(ctx, model); routed {
+		log.Printf("[responses] router=%s selected model=%s", model, routedModel)
+		model = routedModel
 	}
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
@@ -1755,6 +1781,11 @@ func mockModelsHandler(ctx *fasthttp.RequestCtx) {
 		{ID: "text-embedding-3-small", Object: "model", Created: now, OwnedBy: "openai"},
 		{ID: "text-embedding-3-large", Object: "model", Created: now, OwnedBy: "openai"},
 	}
+	// Router deployments are addressable models too, so advertise whatever
+	// -model-router-names configured.
+	for _, name := range modelRouterNameList {
+		models = append(models, OpenAIModel{ID: name, Object: "model", Created: now, OwnedBy: "azure"})
+	}
 
 	resp := OpenAIModelsResponse{
 		Object: "list",
@@ -1896,6 +1927,9 @@ func router(ctx *fasthttp.RequestCtx) {
 		if handleManagementRoute(ctx, path) {
 			return
 		}
+		if handleAzureDeploymentRoute(ctx, path) {
+			return
+		}
 		if _, isConverse, _ := parseBedrockModelFromPath(path); isConverse {
 			mockBedrockConverseHandler(ctx)
 			return
@@ -1928,6 +1962,8 @@ func main() {
 		}
 		log.Printf("Per-key rate limiting enabled for %d key(s)", len(rateLimitedKeyMap))
 	}
+
+	configureModelRouter()
 
 	// Parse dynamic per-key latency behaviors.
 	parseKVList(latencySpikeKeys, func(token string, pct int, b string) {

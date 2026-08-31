@@ -15,6 +15,7 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **OpenAI Batch API Support**: Full `/v1/batches` lifecycle — create, retrieve, list, cancel — plus the `/v1/files` endpoints batches use for input and results, matching OpenAI's object shapes, status vocabulary, and JSONL output format
 - **Anthropic Message Batches API Support**: Full `/v1/messages/batches` lifecycle — create, retrieve, list, cancel, delete, and `/results` — matching Anthropic's object shapes, `processing_status` values, and JSONL results format
 - **Batch Progress Simulation**: `-batch-completion-ms` makes a batch walk its real status progression over a configurable wall-clock window (so polling loops can be exercised), and `-batch-failure-percent` mixes per-request errors into the results
+- **Azure Model Router Support**: Serves Azure OpenAI deployment routes (`POST /openai/deployments/{deployment}/chat/completions`) and simulates the model router — a request addressed to `model-router` comes back with `model` set to the underlying model the router picked, chosen by weighted random, round-robin, or request size via `-model-router-*`
 - **Provider Prefix Support**: Accepts provider-prefixed models like `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`, `vertex/gemini-2.0-flash`, `genai/gemini-2.0-flash`, etc.
 - **Provider-Specific Error Simulation**: `-with-errors` (or `-witherrors`) returns random provider-native error payloads/codes while keeping a success/error mix
 - **Server-Sent Events (SSE) Streaming**: Automatic streaming support for chat completions when `stream: true` is in the request body (SSE format)
@@ -228,7 +229,10 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_LATENCY_RAMP_KEYS`: Comma-separated per-key linear base-latency drift in ms added per minute elapsed (e.g. `slow-key=2000` → +2000ms each minute since server start). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `MOCKER_LATENCY_STEP_KEYS`: Comma-separated per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `MOCKER_FAILURE_AUTH_KEYS`: Comma-separated bearer token values subject to the failure percentage; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `MOCKER_FAILURE_PERCENT`/`MOCKER_FAILURE_JITTER`. `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
-- `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
+- `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash,model-router`)
+- `MOCKER_MODEL_ROUTER_NAMES`: Comma-separated model/deployment names that behave as an Azure model router; requests addressed to one of them answer as the model the router picked (default: `model-router`)
+- `MOCKER_MODEL_ROUTER_MODELS`: Comma-separated models the router may pick, each optionally weighted as `model=weight` (bare entries weigh `1`); list them cheapest first when using the `prompt-size` strategy (default: `gpt-5-nano=55,gpt-5-mini=25,gpt-5-chat=10,gpt-5=10`)
+- `MOCKER_MODEL_ROUTER_STRATEGY`: How the router picks — `random` (weighted), `round-robin`, or `prompt-size` (default: `random`)
 - `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
 - `MOCKER_INPUT_TOKENS`: Fixed input/prompt token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
 - `MOCKER_OUTPUT_TOKENS`: Fixed output/completion token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
@@ -300,7 +304,10 @@ services:
 - `-latency-ramp-keys <keys>`: Per-key linear base-latency drift in ms added per minute elapsed (e.g. `slow-key=2000` → +2000ms each minute since server start). Adjusts the base before jitter so it shifts the distribution an LB should track. The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `-latency-step-keys <keys>`: Per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `-failure-auth-keys <keys>`: Comma-separated bearer token values subject to `-failure-percent`; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `-failure-percent`/`-failure-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
-- `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
+- `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash,model-router`)
+- `-model-router-names <names>`: Comma-separated model/deployment names that behave as an Azure model router. A request addressed to one of them is answered as the underlying model the router picked, so the response's `model` differs from the one requested. Matching is case-insensitive and works whether the name arrives in the body (`"model": "model-router"`, `"azure/model-router"`) or in an Azure deployment path (default: `model-router`)
+- `-model-router-models <models>`: Comma-separated models the router may pick, each optionally weighted as `model=weight` (bare entries weigh `1`, e.g. `gpt-5-nano=55,gpt-5-mini=25,gpt-5=20`). Order matters for the `prompt-size` strategy — list them cheapest first. An empty list disables routing and lets the router name pass through unchanged (default: `gpt-5-nano=55,gpt-5-mini=25,gpt-5-chat=10,gpt-5=10`)
+- `-model-router-strategy <strategy>`: How the router picks a model — `random` samples proportionally to the configured weights, `round-robin` cycles through the list in order (deterministic, good for assertions), and `prompt-size` escalates with the request body size: the first candidate serves bodies under 1KB and each subsequent one covers a 4x larger body (default: `random`)
 - `-big-payload`: Use large ~10KB response payloads instead of small ones (default: `false`)
 - `-input-tokens <count>`: Fixed input/prompt token count to report in every `usage` block (across OpenAI, Anthropic, Gemini, and Bedrock shapes, streaming and non-streaming). Negative disables it (default: `-1`, random/derived per request)
 - `-output-tokens <count>`: Fixed output/completion token count to report in every `usage` block. Negative disables it (default: `-1`, random/derived per request)
@@ -341,6 +348,49 @@ Both endpoints support both standard and streaming responses:
 - **Streaming Response**: When the request body contains `"stream": true`, returns a Server-Sent Events (SSE) stream of chunks
 
 **Note:** Streaming is only supported for the chat completions endpoints. Other endpoints (responses, embeddings) do not support streaming.
+
+### Azure Model Router API
+
+Azure OpenAI addresses a deployment in the URL rather than the request body, so the deployment name stands in for the model:
+
+- `POST /openai/deployments/{deployment}/chat/completions` - Azure-style chat completions
+- `POST /openai/deployments/{deployment}/responses` - Azure-style responses
+- `POST /openai/deployments/{deployment}/embeddings` - Azure-style embeddings
+
+All three also answer with an `/azure` prefix (`/azure/openai/deployments/...`), tolerate an `?api-version=...` query string, and accept a URL-escaped deployment name. A `"model"` in the body still wins over the deployment in the path.
+
+When the deployment (or the body's `model`) matches `-model-router-names` — `model-router` by default — the mocker behaves like Azure AI Foundry's model router: it picks one of `-model-router-models` and reports **that** model in the response, exactly as the real router does. Streaming works too: every SSE chunk carries the picked model.
+
+```bash
+# Address the router deployment; the response says which model answered
+curl -s http://localhost:8000/openai/deployments/model-router/chat/completions?api-version=2025-01-01-preview \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"hi"}]}'
+# => {"id":"cmpl-mock12345", ..., "model":"gpt-5-nano", "usage":{...}}
+
+# The same thing over the plain OpenAI route, naming the router in the body
+curl -s http://localhost:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"model-router","messages":[{"role":"user","content":"hi"}]}'
+```
+
+Configure the candidate pool and how it is picked from:
+
+```bash
+# Weighted random (default): ~55% of requests answer as gpt-5-nano, ~10% as gpt-5
+go run . -model-router-models "gpt-5-nano=55,gpt-5-mini=25,gpt-5-chat=10,gpt-5=10"
+
+# Deterministic cycle — request N answers as candidate N%len, handy for assertions
+go run . -model-router-strategy round-robin
+
+# Escalate with payload size: <1KB -> gpt-5-nano, <4KB -> gpt-5-mini, else gpt-5
+go run . -model-router-strategy prompt-size -model-router-models "gpt-5-nano,gpt-5-mini,gpt-5"
+
+# Route more than one deployment name
+go run . -model-router-names "model-router,my-router-deployment"
+```
+
+Router deployments are advertised on `GET /v1/models` alongside the built-in ids, so gateway-side discovery picks them up.
 
 ### Responses API
 
