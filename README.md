@@ -27,7 +27,7 @@ go build benchmark.go
 **1. Start the mock provider** (optional, but recommended — see [mocker/README.md](mocker/README.md) for all flags):
 
 ```bash
-cd mocker && go run main.go -port 8000
+cd mocker && go run . -port 8000
 ```
 
 **2. Start Bifrost** and point an OpenAI provider at the mocker (base URL `http://localhost:8000`, any dummy API key):

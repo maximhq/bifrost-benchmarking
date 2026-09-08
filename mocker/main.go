@@ -307,6 +307,11 @@ var (
 	startTime          time.Time
 	tpmTriggeredLogged bool
 
+	// Batch API simulation: how long a submitted batch takes to finish and how
+	// many of the requests inside it come back as per-request errors.
+	batchCompletionMs   int
+	batchFailurePercent int
+
 	// Dynamic per-key latency behaviors:
 	// spikes = sparse latency outliers, ramp = gradual base drift, step = abrupt base change.
 	latencySpikeKeys string
@@ -372,6 +377,8 @@ func init() {
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
+	flag.IntVar(&batchCompletionMs, "batch-completion-ms", getEnvInt("MOCKER_BATCH_COMPLETION_MS", 0), "Wall-clock milliseconds a submitted batch takes to reach a terminal status (0 = completes immediately)")
+	flag.IntVar(&batchFailurePercent, "batch-failure-percent", getEnvInt("MOCKER_BATCH_FAILURE_PERCENT", 0), "Percentage of the requests inside a batch that come back as per-request errors (0-100)")
 	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
@@ -1886,6 +1893,9 @@ func router(ctx *fasthttp.RequestCtx) {
 	case "/v1/models":
 		mockModelsHandler(ctx)
 	default:
+		if handleManagementRoute(ctx, path) {
+			return
+		}
 		if _, isConverse, _ := parseBedrockModelFromPath(path); isConverse {
 			mockBedrockConverseHandler(ctx)
 			return
@@ -1967,6 +1977,12 @@ func main() {
 		if tpmAuthKeys != "" {
 			log.Printf("TPM will only apply to requests with auth keys: %s", tpmAuthKeys)
 		}
+	}
+	if batchCompletionMs > 0 {
+		log.Printf("Batches will take %dms to reach a terminal status", batchCompletionMs)
+	}
+	if batchFailurePercent > 0 {
+		log.Printf("%d%% of the requests inside each batch will come back as per-request errors", batchFailurePercent)
 	}
 	log.Printf("Max request body size: 50MB")
 
