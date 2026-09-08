@@ -22,9 +22,9 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Per-Key Failure Targeting**: `-failure-auth-keys` scopes the failure percentage to specific API keys — listed keys fail at the configured rate, all others always succeed. Entries can override the global config per key with `key=percent` or `key=percent:jitter`
 - **Models List Endpoint**: `GET /v1/models` (and `/models`) returns an OpenAI-shaped model list configurable via `-models`, so gateway-side model discovery works against the mocker
 - **Per-Chunk Latency**: For streaming responses, latency is distributed across chunks using deadline-based scheduling so end-to-end wall-clock matches `-latency` regardless of per-chunk serialization overhead
-- **Configurable Streaming Granularity**: `-tokens-per-chunk` controls how many words are batched into each SSE delta (default `5`); higher values reduce envelope overhead and more closely match real provider behavior, lower values stress per-chunk parsing
-- **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag
-- **Realistic Token Usage**: Returns random but realistic token usage statistics, or pin exact counts with `-input-tokens` / `-output-tokens` for deterministic billing/usage tests
+- **Configurable Streaming Granularity**: `-tokens-per-chunk` controls how many words are batched into each SSE delta (default `5`); higher values reduce envelope overhead and more closely match real provider behavior, lower values stress per-chunk parsing. Large payload streams scale chunk size proportionally to keep SSE write counts bounded
+- **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag; large text responses use realistic paragraphs between 20k and 50k generated tokens
+- **Realistic Token Usage**: Returns random but realistic token usage statistics, with large text payloads reporting output tokens from the generated response, or pin exact counts with `-input-tokens` / `-output-tokens` for deterministic billing/usage tests
 - **Configurable Port**: Specify listening port via the `-port` flag
 - **Authentication**: Optional authentication header validation via the `-auth` flag
 - **Failure Simulation**: Configurable failure rate simulation with `-failure-percent` and `-failure-jitter` flags for testing error handling
@@ -111,7 +111,7 @@ once (or the same key for combined effects).
 
 ```bash
 go run main.go -port 8080 -big-payload
-# Returns ~10KB responses instead of small ones
+# Returns realistic paragraph responses between 20k and 50k generated tokens instead of small ones
 ```
 
 **Full simulation:**
@@ -182,7 +182,8 @@ go run main.go -port 8000 -log-raw
 go run main.go -port 8080 -latency 5000
 # Send a request with {"stream": true} to get server-sent event stream.
 # Total stream wall-clock matches -latency (deadline-based scheduling); each
-# SSE delta batches -tokens-per-chunk words (default 5).
+# SSE delta batches -tokens-per-chunk words (default 5). With -big-payload,
+# chunk size scales proportionally to payload size unless -tokens-per-chunk is larger.
 
 go run main.go -port 8080 -latency 5000 -tokens-per-chunk 1
 # One word per chunk — ~5x more SSE events on the wire; useful for stressing
@@ -229,7 +230,7 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
 - `MOCKER_INPUT_TOKENS`: Fixed input/prompt token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
 - `MOCKER_OUTPUT_TOKENS`: Fixed output/completion token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
-- `MOCKER_BIG_PAYLOAD`: Use large payloads - set to `true`, `1`, `false`, or `0` (default: `false`)
+- `MOCKER_BIG_PAYLOAD`: Use large text payloads between 20k and 50k generated tokens - set to `true`, `1`, `false`, or `0` (default: `false`)
 - `MOCKER_AUTH`: Authentication header value to require (default: `""`)
 - `MOCKER_FAILURE_PERCENT`: Base failure percentage 0-100 (default: `0`)
 - `MOCKER_FAILURE_JITTER`: Maximum jitter in percentage points (default: `0`)
@@ -296,7 +297,7 @@ services:
 - `-latency-step-keys <keys>`: Per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `-failure-auth-keys <keys>`: Comma-separated bearer token values subject to `-failure-percent`; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `-failure-percent`/`-failure-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
 - `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
-- `-big-payload`: Use large ~10KB response payloads instead of small ones (default: `false`)
+- `-big-payload`: Use large text response payloads between 20k and 50k generated tokens instead of small ones (default: `false`)
 - `-input-tokens <count>`: Fixed input/prompt token count to report in every `usage` block (across OpenAI, Anthropic, Gemini, and Bedrock shapes, streaming and non-streaming). Negative disables it (default: `-1`, random/derived per request)
 - `-output-tokens <count>`: Fixed output/completion token count to report in every `usage` block. Negative disables it (default: `-1`, random/derived per request)
 - `-auth <auth_header>`: Authentication header value to require. Requests must include this exact value in the `Authorization` header (default: `""`)

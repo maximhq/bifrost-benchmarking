@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +35,60 @@ func TestProviderErrorCatalogCoverage(t *testing.T) {
 		if len(providerErrorCatalog(provider)) == 0 {
 			t.Fatalf("provider %q has no error variants", provider)
 		}
+	}
+}
+
+func TestLargeMockContentUsesRealisticParagraphsUpToTarget(t *testing.T) {
+	content := buildLargeMockContent(largePayloadMaxTokens)
+	tokenCount := len(strings.Fields(content))
+
+	if tokenCount < 49000 || tokenCount > largePayloadMaxTokens {
+		t.Fatalf("large payload token count = %d, want 49000..%d", tokenCount, largePayloadMaxTokens)
+	}
+	if !strings.Contains(content, "\n\n") {
+		t.Fatalf("large payload should include paragraph breaks")
+	}
+	if strings.Count(content, "This is a mocked response") > 0 {
+		t.Fatalf("large payload should use realistic paragraph content, not the short mocked response")
+	}
+}
+
+func TestMockTextContentRandomizesLargePayloadRange(t *testing.T) {
+	prevBigPayload := bigPayload
+	defer func() {
+		bigPayload = prevBigPayload
+	}()
+
+	bigPayload = true
+	for i := 0; i < 20; i++ {
+		tokenCount := len(strings.Fields(mockTextContent("short response")))
+		if tokenCount < largePayloadMinTokens || tokenCount > largePayloadMaxTokens {
+			t.Fatalf("large payload token count = %d, want %d..%d", tokenCount, largePayloadMinTokens, largePayloadMaxTokens)
+		}
+	}
+}
+
+func TestBuildStreamChunksScalesLargePayloadChunkSize(t *testing.T) {
+	prevBigPayload := bigPayload
+	prevTokensPerChunk := tokensPerChunk
+	defer func() {
+		bigPayload = prevBigPayload
+		tokensPerChunk = prevTokensPerChunk
+	}()
+
+	bigPayload = true
+	tokensPerChunk = 5
+	words := make([]string, 50000)
+	for i := range words {
+		words[i] = "token"
+	}
+
+	chunks := buildStreamChunks(words)
+	if len(chunks) > largePayloadStreamChunks {
+		t.Fatalf("large payload stream chunks = %d, want <= %d", len(chunks), largePayloadStreamChunks)
+	}
+	if got := len(strings.Fields(chunks[0])); got <= tokensPerChunk {
+		t.Fatalf("first chunk has %d words, want more than configured small chunk size %d", got, tokensPerChunk)
 	}
 }
 
