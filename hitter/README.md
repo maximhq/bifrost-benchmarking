@@ -1,6 +1,6 @@
 # Hitter - Load Testing Tool for Bifrost
 
-A high-performance load testing tool for testing Bifrost's chat completion endpoints with support for multiple models, providers, and streaming responses.
+A high-performance load testing tool for testing Bifrost's chat completion and responses endpoints with support for multiple models, providers, and streaming responses.
 
 ## Features
 
@@ -61,14 +61,18 @@ go run main.go [flags]
 
 | Flag            | Type     | Default                                     | Description                                  |
 | --------------- | -------- | ------------------------------------------- | -------------------------------------------- |
-| `--url`         | string   | `http://localhost:8080/v1/chat/completions` | Target API endpoint                          |
+| `--url`         | string   | `http://localhost:8080/v1/chat/completions` | Target chat completions API endpoint         |
 | `--rps`         | int      | `100`                                       | Requests per second                          |
 | `--duration`    | duration | `60s`                                       | Test duration (e.g., 30s, 5m, 1h)            |
+| `--timeout`     | duration | `5m`                                        | Per-request timeout                          |
+| `--expected-latency` | duration | `10s`                                  | Expected average request duration for auto concurrency sizing |
 | `--models`      | string   | `gpt-4,gpt-4o,gpt-4o-mini,gpt-4.1,gpt-5`    | Comma-separated list of models to test       |
 | `--providers`   | string   | `""`                                        | Comma-separated list of providers (optional) |
 | `--max-tokens`  | int      | `150`                                       | Maximum tokens per request                   |
+| `--max-concurrency` | int  | `0`                                         | Maximum in-flight requests (`0` = auto, `-1` = unlimited) |
 | `--temperature` | float    | `0.7`                                       | Temperature for model responses              |
 | `--stream`      | bool     | `false`                                     | Enable streaming responses                   |
+| `--responses-api` | bool   | `false`                                     | Use Responses API payload and `/responses` URL rewrite when streaming |
 | `--verbose`     | bool     | `false`                                     | Enable verbose logging                       |
 | `--virtual-key` | string   | `""`                                        | Virtual API key for authentication           |
 | `--pdf`         | string   | `""`                                        | Path to a PDF to attach as a multimodal `file` content block (enables attachment mode) |
@@ -189,6 +193,8 @@ Use `--prompt` to override the default "Summarize the attached PDF document in d
 - **Token Variation**: Max tokens vary by ±25 tokens from the configured value
 - **Temperature Variation**: Temperature varies by ±0.1 from the configured value
 - **Fixed Prompt**: Passing `--prompt` replaces the random prompt selection with the given text
+- **Streaming Endpoint**: When `--stream` is set, requests stream against the configured URL. Add `--responses-api` to use the OpenAI Responses API payload and derive the target URL by replacing `/chat/completions` with `/responses`.
+- **Concurrency Limit**: `--max-concurrency=0` auto-sizes in-flight capacity as `ceil(rps * expected-latency * 1.25)`, so the configured RPS is not capped by a small fixed default. Use a positive value to force a cap, or `-1` for unlimited.
 - **Graceful Shutdown**: Press `Ctrl+C` to stop the test early and see final statistics
 
 ### PDF Attachment Mode (`--pdf`)
@@ -287,7 +293,7 @@ The tool uses a variety of prompts including:
 1. **Start Small**: Begin with low RPS (10-50) and gradually increase
 2. **Use Streaming**: Streaming tests better simulate real-world usage
 3. **Monitor Server**: Watch server metrics during load tests
-4. **Timeout Settings**: Default HTTP timeout is 30 seconds
+4. **Timeout Settings**: Default HTTP timeout is 5 minutes. Increase `--timeout` for very large streaming payloads. If actual request duration is much higher than 10 seconds, raise `--expected-latency` so auto concurrency can still sustain the target RPS.
 5. **System Resources**: Ensure your system can handle the target RPS
 
 ## Contributing

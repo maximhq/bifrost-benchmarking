@@ -353,6 +353,33 @@ func parseKVList(csv string, fn func(token string, a int, b string)) {
 	}
 }
 
+const (
+	largePayloadMinTokens    = 20000
+	largePayloadMaxTokens    = 50000
+	largePayloadStreamChunks = 500
+)
+
+var realisticPayloadSentences = []string{
+	"The operations review began with a careful comparison of request volume, cache behavior, and provider latency across several customer-facing workflows.",
+	"Each team described the same pattern from a different angle: small prompts were easy to route, while longer analytical requests exposed queueing delays and memory pressure.",
+	"The engineering group traced the slowest calls to documents that mixed dense requirements, tables, code snippets, and follow-up questions in a single conversation.",
+	"Product managers wanted the benchmark to preserve that structure because real users rarely send isolated sentences when they are investigating incidents or planning migrations.",
+	"The resulting report explained how retries, streaming chunks, timeout budgets, and response parsing interacted when payloads moved from routine messages to full-context analysis.",
+	"A realistic answer did not repeat a single phrase; it moved through background, observations, tradeoffs, recommendations, and next steps with enough variation to exercise token handling.",
+	"The mock assistant summarized customer context, compared alternatives, identified risks, and then returned practical guidance that downstream systems could log, meter, and inspect.",
+	"In one scenario, the response walked through a rollout plan for a data platform, including ownership boundaries, validation checkpoints, and recovery procedures.",
+	"Another section covered compliance review, where the model explained retention requirements, audit evidence, access controls, and exception handling in plain operational language.",
+	"The benchmark also included implementation detail, such as how service limits should be modeled, where observability events should be emitted, and which failures should remain retryable.",
+	"Long paragraphs were intentionally mixed with shorter ones so streaming clients had to assemble natural prose instead of processing a mechanically repeated token sequence.",
+	"The content stayed deterministic enough for tests, but varied enough to look like a substantial assistant response produced during a real enterprise workflow.",
+	"When the answer discussed performance, it connected token volume to serialization cost, network transfer time, database writes, and client-side rendering behavior.",
+	"When it discussed reliability, it described fallback routing, idempotency keys, error classification, and the difference between transient provider failures and invalid requests.",
+	"When it discussed user experience, it emphasized partial progress indicators, stable formatting, clear final states, and logs that help support teams explain what happened.",
+	"The final recommendation favored measuring both wall-clock latency and useful completion progress because a large response can feel responsive when streaming begins quickly.",
+	"It also cautioned that token counts should be based on generated content rather than arbitrary placeholders, otherwise dashboards will understate cost and throughput.",
+	"By using realistic paragraphs, the payload exercises sentence boundaries, whitespace, punctuation, and paragraph breaks that simple repeated strings usually miss.",
+}
+
 func init() {
 	flag.StringVar(&host, "host", getEnvString("MOCKER_HOST", "localhost"), "Host address to bind the mock server")
 	flag.IntVar(&port, "port", getEnvInt("MOCKER_PORT", 8000), "Port for the mock server to listen on")
@@ -436,6 +463,58 @@ func getEnvBool(key string, defaultValue bool) bool {
 // StrPtr creates a pointer to a string value.
 func StrPtr(s string) *string {
 	return &s
+}
+
+func buildLargeMockContent(targetTokens int) string {
+	if targetTokens <= 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	tokens := 0
+	sentenceIndex := 0
+	sentencesInParagraph := 0
+
+	for tokens < targetTokens {
+		sentence := realisticPayloadSentences[sentenceIndex%len(realisticPayloadSentences)]
+		sentenceTokens := len(strings.Fields(sentence))
+		if tokens+sentenceTokens > targetTokens && tokens > 0 {
+			break
+		}
+
+		if b.Len() > 0 {
+			if sentencesInParagraph == 0 {
+				b.WriteString("\n\n")
+			} else {
+				b.WriteByte(' ')
+			}
+		}
+		b.WriteString(sentence)
+
+		tokens += sentenceTokens
+		sentenceIndex++
+		sentencesInParagraph++
+		if sentencesInParagraph == 5 {
+			sentencesInParagraph = 0
+		}
+	}
+
+	return b.String()
+}
+
+func mockTextContent(defaultContent string) string {
+	if !bigPayload {
+		return defaultContent
+	}
+	targetTokens := largePayloadMinTokens + rand.Intn(largePayloadMaxTokens-largePayloadMinTokens+1)
+	return buildLargeMockContent(targetTokens)
+}
+
+func mockOutputTokenCount(content string, fallback int) int {
+	if bigPayload {
+		return len(strings.Fields(content))
+	}
+	return fallback
 }
 
 // authKeyMatches reports whether the request's Authorization header value is in
@@ -906,11 +985,8 @@ func setSSEHeaders(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/event-stream; charset=utf-8")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	ctx.Response.Header.Set("Cache-Control", "no-cache")
-	ctx.Response.Header.Set("Connection", "close")
 	ctx.Response.Header.Set("X-Accel-Buffering", "no")
-	ctx.Response.Header.Set("Transfer-Encoding", "chunked")
 	ctx.Response.ImmediateHeaderFlush = true
-	ctx.SetConnectionClose()
 }
 
 func getStreamWords(content string) []string {
@@ -928,6 +1004,12 @@ func buildStreamChunks(words []string) []string {
 	n := tokensPerChunk
 	if n < 1 {
 		n = 1
+	}
+	if bigPayload {
+		proportionalChunkSize := (len(words) + largePayloadStreamChunks - 1) / largePayloadStreamChunks
+		if proportionalChunkSize > n {
+			n = proportionalChunkSize
+		}
 	}
 	chunks := make([]string, 0, (len(words)+n-1)/n)
 	for i := 0; i < len(words); i += n {
@@ -977,18 +1059,24 @@ func sleepUntilStreamDeadline(start time.Time, total time.Duration, i, gaps int)
 	}
 }
 
-func writeSSEJSON(w *bufio.Writer, event string, payload any) {
+func writeSSEJSON(w *bufio.Writer, event string, payload any) error {
 	data, _ := sonic.Marshal(payload)
 	if event != "" {
-		_, _ = w.WriteString("event: " + event + "\n")
+		if _, err := w.WriteString("event: " + event + "\n"); err != nil {
+			return err
+		}
 	}
-	_, _ = w.WriteString(fmt.Sprintf("data: %s\n\n", string(data)))
-	_ = w.Flush()
+	if _, err := w.WriteString(fmt.Sprintf("data: %s\n\n", string(data))); err != nil {
+		return err
+	}
+	return w.Flush()
 }
 
-func writeSSEDataLine(w *bufio.Writer, payload string) {
-	_, _ = w.WriteString(fmt.Sprintf("data: %s\n\n", payload))
-	_ = w.Flush()
+func writeSSEDataLine(w *bufio.Writer, payload string) error {
+	if _, err := w.WriteString(fmt.Sprintf("data: %s\n\n", payload)); err != nil {
+		return err
+	}
+	return w.Flush()
 }
 
 // shouldTriggerTPM checks if TPM (429) scenario should be triggered for the given auth header value.
@@ -1125,7 +1213,9 @@ func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCon
 					},
 				},
 			}
-			writeSSEJSON(w, "", chunk)
+			if err := writeSSEJSON(w, "", chunk); err != nil {
+				return
+			}
 			if i < gaps {
 				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
@@ -1144,8 +1234,10 @@ func sendOpenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCon
 				},
 			},
 		}
-		writeSSEJSON(w, "", finalChunk)
-		writeSSEDataLine(w, "[DONE]")
+		if err := writeSSEJSON(w, "", finalChunk); err != nil {
+			return
+		}
+		_ = writeSSEDataLine(w, "[DONE]")
 	})
 }
 
@@ -1169,33 +1261,41 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 				StopSequence: nil,
 			},
 		}
-		writeSSEJSON(w, "message_start", startMsg)
-		writeSSEJSON(w, "content_block_start", map[string]any{
+		if err := writeSSEJSON(w, "message_start", startMsg); err != nil {
+			return
+		}
+		if err := writeSSEJSON(w, "content_block_start", map[string]any{
 			"type":          "content_block_start",
 			"index":         0,
 			"content_block": AnthropicContentBlock{Type: "text", Text: ""},
-		})
+		}); err != nil {
+			return
+		}
 
 		start := time.Now()
 		for i, token := range tokens {
-			writeSSEJSON(w, "content_block_delta", map[string]any{
+			if err := writeSSEJSON(w, "content_block_delta", map[string]any{
 				"type":  "content_block_delta",
 				"index": 0,
 				"delta": AnthropicTextDelta{
 					Type: "text_delta",
 					Text: token,
 				},
-			})
+			}); err != nil {
+				return
+			}
 			if i < gaps {
 				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
 		}
 
-		writeSSEJSON(w, "content_block_stop", map[string]any{
+		if err := writeSSEJSON(w, "content_block_stop", map[string]any{
 			"type":  "content_block_stop",
 			"index": 0,
-		})
-		writeSSEJSON(w, "message_delta", map[string]any{
+		}); err != nil {
+			return
+		}
+		if err := writeSSEJSON(w, "message_delta", map[string]any{
 			"type": "message_delta",
 			"delta": map[string]any{
 				"stop_reason":   "end_turn",
@@ -1204,11 +1304,15 @@ func sendAnthropicStreamingResponse(ctx *fasthttp.RequestCtx, model string, mock
 			"usage": map[string]any{
 				"output_tokens": resolveOutputTokens(len(words)),
 			},
-		})
-		writeSSEJSON(w, "message_stop", map[string]any{
+		}); err != nil {
+			return
+		}
+		if err := writeSSEJSON(w, "message_stop", map[string]any{
 			"type": "message_stop",
-		})
-		writeSSEDataLine(w, "[DONE]")
+		}); err != nil {
+			return
+		}
+		_ = writeSSEDataLine(w, "[DONE]")
 	})
 }
 
@@ -1234,7 +1338,9 @@ func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCont
 				},
 				"modelVersion": model,
 			}
-			writeSSEJSON(w, "", chunk)
+			if err := writeSSEJSON(w, "", chunk); err != nil {
+				return
+			}
 			if i < gaps {
 				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
@@ -1253,8 +1359,10 @@ func sendGenAIStreamingResponse(ctx *fasthttp.RequestCtx, model string, mockCont
 			},
 			"modelVersion": model,
 		}
-		writeSSEJSON(w, "", finalChunk)
-		writeSSEDataLine(w, "[DONE]")
+		if err := writeSSEJSON(w, "", finalChunk); err != nil {
+			return
+		}
+		_ = writeSSEDataLine(w, "[DONE]")
 	})
 }
 
@@ -1266,41 +1374,49 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 	totalLatency := getStreamTotalLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	ctx.SetBodyStreamWriter(func(w *bufio.Writer) {
-		writeSSEJSON(w, "", map[string]any{
+		if err := writeSSEJSON(w, "", map[string]any{
 			"messageStart": map[string]any{
 				"role":  "assistant",
 				"model": model,
 			},
-		})
+		}); err != nil {
+			return
+		}
 
 		start := time.Now()
 		for i, token := range tokens {
-			writeSSEJSON(w, "", map[string]any{
+			if err := writeSSEJSON(w, "", map[string]any{
 				"contentBlockDelta": map[string]any{
 					"contentBlockIndex": 0,
 					"delta": map[string]any{
 						"text": token,
 					},
 				},
-			})
+			}); err != nil {
+				return
+			}
 			if i < gaps {
 				sleepUntilStreamDeadline(start, totalLatency, i, gaps)
 			}
 		}
 
-		writeSSEJSON(w, "", map[string]any{
+		if err := writeSSEJSON(w, "", map[string]any{
 			"contentBlockStop": map[string]any{
 				"contentBlockIndex": 0,
 			},
-		})
-		writeSSEJSON(w, "", map[string]any{
+		}); err != nil {
+			return
+		}
+		if err := writeSSEJSON(w, "", map[string]any{
 			"messageStop": map[string]any{
 				"stopReason": "end_turn",
 			},
-		})
+		}); err != nil {
+			return
+		}
 		streamInputTokens := resolveInputTokens(rand.Intn(1000))
 		streamOutputTokens := resolveOutputTokens(len(words))
-		writeSSEJSON(w, "", map[string]any{
+		if err := writeSSEJSON(w, "", map[string]any{
 			"metadata": map[string]any{
 				"usage": map[string]any{
 					"inputTokens":  streamInputTokens,
@@ -1308,8 +1424,10 @@ func sendBedrockConverseStreamingResponse(ctx *fasthttp.RequestCtx, model string
 					"totalTokens":  streamInputTokens + streamOutputTokens,
 				},
 			},
-		})
-		writeSSEDataLine(w, "[DONE]")
+		}); err != nil {
+			return
+		}
+		_ = writeSSEDataLine(w, "[DONE]")
 	})
 }
 
@@ -1331,16 +1449,15 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "The server had an error while processing your request. Sorry about that!")
 		return
 	}
-	if provider != "" {
-		log.Printf("[chat/completions] provider=%s model=%s stream=%v", provider, model, stream)
-	} else {
-		log.Printf("[chat/completions] model=%s stream=%v", model, stream)
+	if logRaw {
+		if provider != "" {
+			log.Printf("[chat/completions] provider=%s model=%s stream=%v", provider, model, stream)
+		} else {
+			log.Printf("[chat/completions] model=%s stream=%v", model, stream)
+		}
 	}
 
-	mockContent := "This is a mocked response from the OpenAI mocker server."
-	if bigPayload {
-		mockContent = strings.Repeat(mockContent, 182)
-	}
+	mockContent := mockTextContent("This is a mocked response from the OpenAI mocker server.")
 
 	// Check if streaming is requested
 	if stream {
@@ -1367,7 +1484,7 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	randomInputTokens := resolveInputTokens(rand.Intn(1000))
-	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(mockOutputTokenCount(mockContent, rand.Intn(1000)))
 
 	mockResp := OpenAIChatCompletionsResponse{
 		ID:      "cmpl-mock12345",
@@ -1418,13 +1535,10 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
-	mockContent := "This is a mocked response from the OpenAI mocker server."
-	if bigPayload {
-		mockContent = strings.Repeat(mockContent, 182)
-	}
+	mockContent := mockTextContent("This is a mocked response from the OpenAI mocker server.")
 
 	randomInputTokens := resolveInputTokens(rand.Intn(1000))
-	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(mockOutputTokenCount(mockContent, rand.Intn(1000)))
 
 	resp := OpenAIResponsesResponse{
 		ID:      "resp-mock12345",
@@ -1558,10 +1672,7 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 		log.Printf("[anthropic/messages] model=%s stream=%v", model, stream)
 	}
 
-	mockContent := "This is a mocked response from the Bifrost mocker server."
-	if bigPayload {
-		mockContent = strings.Repeat(mockContent, 182)
-	}
+	mockContent := mockTextContent("This is a mocked response from the Bifrost mocker server.")
 
 	if stream {
 		sendAnthropicStreamingResponse(ctx, model, mockContent)
@@ -1571,7 +1682,7 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	randomInputTokens := resolveInputTokens(rand.Intn(1000))
-	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(mockOutputTokenCount(mockContent, rand.Intn(1000)))
 
 	resp := AnthropicMessageResponse{
 		ID:           "msg_mock12345",
@@ -1622,10 +1733,7 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 		log.Printf("[genai/generateContent] model=%s stream=%v", model, isStreamPath)
 	}
 
-	mockContent := "This is a mocked response from the Bifrost mocker server."
-	if bigPayload {
-		mockContent = strings.Repeat(mockContent, 182)
-	}
+	mockContent := mockTextContent("This is a mocked response from the Bifrost mocker server.")
 
 	if isStreamPath {
 		sendGenAIStreamingResponse(ctx, model, mockContent)
@@ -1635,7 +1743,7 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 
 	randomInputTokens := resolveInputTokens(rand.Intn(1000))
-	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(mockOutputTokenCount(mockContent, rand.Intn(1000)))
 
 	resp := GenAIResponse{
 		Candidates: []GenAICandidate{
@@ -1692,10 +1800,7 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	log.Printf("[bedrock/converse] model=%s stream=%v", model, isStream)
-	mockContent := "This is a mocked response from the Bifrost mocker server."
-	if bigPayload {
-		mockContent = strings.Repeat(mockContent, 182)
-	}
+	mockContent := mockTextContent("This is a mocked response from the Bifrost mocker server.")
 	if isStream {
 		sendBedrockConverseStreamingResponse(ctx, model, mockContent)
 		return
@@ -1703,7 +1808,7 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 
 	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
 	randomInputTokens := resolveInputTokens(rand.Intn(1000))
-	randomOutputTokens := resolveOutputTokens(rand.Intn(1000))
+	randomOutputTokens := resolveOutputTokens(mockOutputTokenCount(mockContent, rand.Intn(1000)))
 	resp := BedrockConverseResponse{
 		Output: BedrockConverseOutput{
 			Message: BedrockMessage{

@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/base64"
 	"flag"
+	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -27,6 +29,14 @@ type ChatRequest struct {
 	MaxTokens   int       `json:"max_tokens,omitempty"`
 	Temperature float64   `json:"temperature,omitempty"`
 	Stream      bool      `json:"stream,omitempty"`
+}
+
+type ResponsesRequest struct {
+	Model           string  `json:"model"`
+	Input           string  `json:"input"`
+	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
+	Temperature     float64 `json:"temperature,omitempty"`
+	Stream          bool    `json:"stream,omitempty"`
 }
 
 type Message struct {
@@ -62,18 +72,22 @@ type FilePart struct {
 }
 
 type Config struct {
-	URL         string
-	RPS         int
-	Duration    time.Duration
-	Models      []string
-	Providers   []string
-	MaxTokens   int
-	Temperature float64
-	Verbose     bool
-	Stream      bool
-	VirtualKey  string
-	PDFPath     string
-	Prompt      string
+	URL             string
+	RPS             int
+	Duration        time.Duration
+	Timeout         time.Duration
+	ExpectedLatency time.Duration
+	Models          []string
+	Providers       []string
+	MaxTokens       int
+	MaxConcurrency  int
+	Temperature     float64
+	Verbose         bool
+	Stream          bool
+	ResponsesAPI    bool
+	VirtualKey      string
+	PDFPath         string
+	Prompt          string
 }
 
 // Prebuilt request bodies, populated once at startup when --pdf is set so the
@@ -113,18 +127,26 @@ var prompts = []string{
 	"What are the phases of the moon?",
 }
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var httpClient = &http.Client{Timeout: 5 * time.Minute}
 
 func main() {
 	config := parseFlags()
+	configureHTTPClient(config)
 
 	log.Printf("🚀 Starting Load Test")
 	log.Printf("   URL: %s", config.URL)
 	log.Printf("   RPS: %d", config.RPS)
 	log.Printf("   Duration: %s", config.Duration)
+	log.Printf("   Timeout: %s", config.Timeout)
+	log.Printf("   Expected request duration: %s", config.ExpectedLatency)
+	log.Printf("   Max concurrency: %d", config.MaxConcurrency)
 	log.Printf("   Models: %v", config.Models)
 	log.Printf("   Providers: %v", config.Providers)
 	log.Printf("   Stream: %v", config.Stream)
+	log.Printf("   Responses API: %v", config.ResponsesAPI)
+	if config.Stream {
+		log.Printf("   Stream URL: %s", targetURL(config))
+	}
 
 	// Attachment mode: pre-encode the PDF into reusable request bodies.
 	if config.PDFPath != "" {
@@ -157,6 +179,10 @@ func main() {
 	defer statsTicker.Stop()
 
 	var wg sync.WaitGroup
+	var concurrencyGate chan struct{}
+	if config.MaxConcurrency > 0 {
+		concurrencyGate = make(chan struct{}, config.MaxConcurrency)
+	}
 
 	go func() {
 		for {
@@ -178,10 +204,20 @@ func main() {
 			if time.Now().After(endTime) {
 				goto cleanup
 			}
+			if concurrencyGate != nil {
+				select {
+				case concurrencyGate <- struct{}{}:
+				case <-ctx.Done():
+					goto cleanup
+				}
+			}
 
 			wg.Add(1)
 			go func(reqNum int) {
 				defer wg.Done()
+				if concurrencyGate != nil {
+					defer func() { <-concurrencyGate }()
+				}
 				makeRequest(ctx, config, stats, reqNum)
 			}(requestCount)
 			requestCount++
@@ -203,10 +239,14 @@ func parseFlags() *Config {
 	flag.StringVar(&config.URL, "url", "http://localhost:8080/v1/chat/completions", "Target URL")
 	flag.IntVar(&config.RPS, "rps", 100, "Requests per second")
 	flag.DurationVar(&config.Duration, "duration", 60*time.Second, "Test duration")
+	flag.DurationVar(&config.Timeout, "timeout", 5*time.Minute, "Per-request timeout")
+	flag.DurationVar(&config.ExpectedLatency, "expected-latency", 10*time.Second, "Expected average request duration used for auto concurrency sizing")
 	flag.IntVar(&config.MaxTokens, "max-tokens", 150, "Max tokens per request")
+	flag.IntVar(&config.MaxConcurrency, "max-concurrency", 0, "Maximum in-flight requests (0 = auto, -1 = unlimited)")
 	flag.Float64Var(&config.Temperature, "temperature", 0.7, "Temperature for requests")
 	flag.BoolVar(&config.Verbose, "verbose", false, "Verbose logging")
 	flag.BoolVar(&config.Stream, "stream", false, "Enable streaming responses")
+	flag.BoolVar(&config.ResponsesAPI, "responses-api", false, "Use OpenAI Responses API payload and /responses URL rewrite when streaming")
 	flag.StringVar(&config.VirtualKey, "virtual-key", "", "Virtual key to use for requests")
 	flag.StringVar(&config.PDFPath, "pdf", "", "Path to a PDF file to attach as a multimodal 'file' content block (enables attachment mode)")
 	flag.StringVar(&config.Prompt, "prompt", "", "Override the user prompt text (defaults to a random prompt, or a fixed summarize prompt in --pdf mode)")
@@ -231,6 +271,16 @@ func parseFlags() *Config {
 	if config.Duration <= 0 {
 		log.Fatal("Duration must be greater than 0")
 	}
+	if config.Timeout <= 0 {
+		log.Fatal("Timeout must be greater than 0")
+	}
+	if config.ExpectedLatency <= 0 {
+		log.Fatal("Expected latency must be greater than 0")
+	}
+	if config.MaxConcurrency < -1 {
+		log.Fatal("Max concurrency must be -1, 0, or greater")
+	}
+	config.MaxConcurrency = resolveMaxConcurrency(config)
 	if len(config.Models) == 0 {
 		config.Models = []string{"gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-5"}
 	}
@@ -295,6 +345,40 @@ func buildPDFBodies(config *Config) {
 	log.Printf("📦 Prebuilt %d PDF request body/bodies, ~%d MB each", len(prebuiltBodies), len(prebuiltBodies[0])/(1024*1024))
 }
 
+func resolveMaxConcurrency(config *Config) int {
+	switch {
+	case config.MaxConcurrency > 0:
+		return config.MaxConcurrency
+	case config.MaxConcurrency < 0:
+		return 0
+	default:
+		concurrency := int(math.Ceil(float64(config.RPS) * config.ExpectedLatency.Seconds() * 1.25))
+		if concurrency < config.RPS {
+			return config.RPS
+		}
+		return concurrency
+	}
+}
+
+func configureHTTPClient(config *Config) {
+	poolSize := config.MaxConcurrency
+	if poolSize <= 0 || poolSize < 100 {
+		poolSize = 100
+	}
+	transport := &http.Transport{
+		MaxIdleConns:        poolSize,
+		MaxIdleConnsPerHost: poolSize,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	if config.MaxConcurrency > 0 {
+		transport.MaxConnsPerHost = config.MaxConcurrency
+	}
+	httpClient = &http.Client{
+		Timeout:   config.Timeout,
+		Transport: transport,
+	}
+}
+
 func parseCommaSeparated(s string) []string {
 	var result []string
 	for _, segment := range strings.Split(s, ",") {
@@ -341,7 +425,7 @@ func makeRequest(ctx context.Context, config *Config, stats *Stats, reqNum int) 
 			model = provider + "/" + model
 		}
 
-		request := ChatRequest{
+		requestBody := interface{}(ChatRequest{
 			Model: model,
 			Messages: []Message{
 				{
@@ -352,10 +436,20 @@ func makeRequest(ctx context.Context, config *Config, stats *Stats, reqNum int) 
 			MaxTokens:   maxTokens,
 			Temperature: config.Temperature + (rand.Float64()-0.5)*0.2, // ±0.1 variation
 			Stream:      config.Stream,
+		})
+
+		if config.Stream && config.ResponsesAPI {
+			requestBody = ResponsesRequest{
+				Model:           model,
+				Input:           prompt,
+				MaxOutputTokens: maxTokens,
+				Temperature:     config.Temperature + (rand.Float64()-0.5)*0.2, // ±0.1 variation
+				Stream:          true,
+			}
 		}
 
 		var err error
-		jsonData, err = sonic.Marshal(request)
+		jsonData, err = sonic.Marshal(requestBody)
 		if err != nil {
 			atomic.AddInt64(&stats.errorRequests, 1)
 			if config.Verbose {
@@ -368,7 +462,7 @@ func makeRequest(ctx context.Context, config *Config, stats *Stats, reqNum int) 
 	startTime := time.Now()
 
 	// Create HTTP request (bytes.NewReader shares the prebuilt slice without copying)
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", config.URL, bytes.NewReader(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", targetURL(config), bytes.NewReader(jsonData))
 	if err != nil {
 		atomic.AddInt64(&stats.errorRequests, 1)
 		if config.Verbose {
@@ -429,6 +523,13 @@ func makeRequest(ctx context.Context, config *Config, stats *Stats, reqNum int) 
 	}
 }
 
+func targetURL(config *Config) string {
+	if !config.Stream || !config.ResponsesAPI {
+		return config.URL
+	}
+	return strings.Replace(config.URL, "/chat/completions", "/responses", 1)
+}
+
 func printBasicStats(stats *Stats, elapsed time.Duration) {
 	total := atomic.LoadInt64(&stats.totalRequests)
 	success := atomic.LoadInt64(&stats.successRequests)
@@ -446,9 +547,12 @@ func printBasicStats(stats *Stats, elapsed time.Duration) {
 
 func readStream(body io.Reader, verbose bool, reqNum int) error {
 	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	sawDataLine := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {
+			sawDataLine = true
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
 				break
@@ -459,7 +563,13 @@ func readStream(body io.Reader, verbose bool, reqNum int) error {
 			}
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if !sawDataLine {
+		return fmt.Errorf("stream response did not contain SSE data lines")
+	}
+	return nil
 }
 
 func printFinalStats(stats *Stats, duration time.Duration) {

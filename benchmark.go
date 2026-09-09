@@ -17,6 +17,8 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/joho/godotenv"
+	tiktoken "github.com/pkoukk/tiktoken-go"
+	tiktokenloader "github.com/pkoukk/tiktoken-go-loader"
 	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/v3/process"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
@@ -33,6 +35,8 @@ type Provider struct {
 	Payload         []byte // JSON payload to be used for requests
 	PayloadTemplate string // String template for efficient payload generation (pre-built with placeholders)
 	RequestType     string // Type of request: "chat" or "embedding"
+	InputTokens     int    // Estimated input tokens for the request payload prompt/messages
+	MaxOutputTokens int    // Requested max output tokens for chat requests
 }
 
 // BenchmarkResult holds the aggregated metrics from a single benchmark run for a provider.
@@ -42,6 +46,8 @@ type BenchmarkResult struct {
 	CPUUsage          float64         // (Currently unused) Placeholder for CPU usage metrics
 	ServerMemoryStats []ServerMemStat // Time-series data of server memory usage during the benchmark
 	DropReasons       map[string]int  // Tracks reasons for dropped or failed requests and their counts
+	InputTokens       int             // Estimated input tokens per request
+	MaxOutputTokens   int             // Requested max output tokens per chat request
 }
 
 // MemStat captures generic memory statistics (currently unused in active logic but defined for potential future use).
@@ -74,6 +80,7 @@ func main() {
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, litellm, portkey, openai)")
 	bigPayload := flag.Bool("big-payload", false, "Use a bigger payload")
 	model := flag.String("model", "gpt-4o-mini", "Model to use")
+	maxOutputTokens := flag.Int("max-output-tokens", 0, "Max output tokens for chat requests. Defaults to 3000 with --big-payload and is omitted otherwise")
 	suffix := flag.String("suffix", "v1", "Suffix to add to the url route")
 	promptFile := flag.String("prompt-file", "", "Path to a file containing the prompt to use")
 	path := flag.String("path", "chat/completions", "API path to hit (e.g., 'chat/completions' or 'embeddings')")
@@ -112,6 +119,10 @@ func main() {
 		log.Fatalf("Invalid request-type '%s'. Must be 'chat' or 'embedding'", *requestType)
 	}
 
+	if *maxOutputTokens < 0 {
+		log.Fatalf("--max-output-tokens cannot be negative")
+	}
+
 	// Read prompt from file if specified
 	var filePrompt string
 	if *promptFile != "" {
@@ -124,7 +135,7 @@ func main() {
 	}
 
 	// Initialize providers
-	providers := initializeProviders(*bigPayload, *model, *suffix, *path, *requestType, filePrompt, *host)
+	providers := initializeProviders(*bigPayload, *model, *maxOutputTokens, *suffix, *path, *requestType, filePrompt, *host)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -162,7 +173,7 @@ func getProviderNames(providers []Provider) []string {
 // initializeProvider creates and configures a Provider struct based on the command-line arguments.
 // It determines the payload (small or big) and marshals it into JSON bytes.
 // Placeholders #{request_index} and #{timestamp} in the payload content will be dynamically replaced.
-func initializeProviders(bigPayload bool, model string, suffix string, apiPath string, requestType string, filePrompt string, host string) []Provider {
+func initializeProviders(bigPayload bool, model string, maxOutputTokens int, suffix string, apiPath string, requestType string, filePrompt string, host string) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
@@ -174,32 +185,22 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 	if filePrompt != "" {
 		promptContent = "#{request_index} #{timestamp} " + filePrompt
 	} else if bigPayload {
-		promptContent = "#{request_index} #{timestamp} This is a benchmark request. " +
-			"Please provide a comprehensive analysis of the following topics: " +
-			"1. Explain the concept of Proxy Gateway in the context of AI, including its architecture, benefits, and use cases. " +
-			"2. Discuss the role of load balancing and request routing in AI proxy gateways. " +
-			"3. Analyze the impact of caching and rate limiting on AI service performance. " +
-			"4. Describe common challenges in implementing AI proxy gateways and potential solutions. " +
-			"5. Compare different AI proxy gateway implementations and their trade-offs. " +
-			"6. What is the difference between a proxy gateway and a reverse proxy? " +
-			"7. What is the difference between a proxy gateway and a load balancer? " +
-			"8. What is the difference between a proxy gateway and a web server? " +
-			"9. What is the difference between a proxy gateway and a CDN? " +
-			"10. What is the difference between a proxy gateway and a firewall? " +
-			"11. What is the difference between a proxy gateway and a VPN? " +
-			"12. What is the difference between a proxy gateway and a WAF? " +
-			"13. What is the difference between a proxy gateway and a DDoS protection service? " +
-			"14. What is the difference between a proxy gateway and a DNS server? " +
-			"15. What is the difference between a proxy gateway and a web application firewall? " +
-			"16. What is the difference between a proxy gateway and a load balancer? " +
-			"17. What is the difference between a proxy gateway and a web server? " +
-			"18. What is the difference between a proxy gateway and a CDN? " +
-			"19. What is the difference between a proxy gateway and a firewall? " +
-			"20. What is the difference between a proxy gateway and a VPN? " +
-			"Please provide detailed explanations with examples and technical details for each point. "
+		promptContent = "#{request_index} #{timestamp} " + buildLargeRiskManagementPrompt(20)
 	} else {
 		promptContent = "#{request_index} #{timestamp} This is a benchmark request. How are you?"
 	}
+
+	if requestType == "chat" && maxOutputTokens == 0 && bigPayload {
+		maxOutputTokens = 3000
+	}
+
+	systemPrompt := "You are a senior quantitative analyst at a global hedge fund with deep expertise in risk management, portfolio construction, and derivatives pricing. Provide extremely detailed, technically rigorous responses with full mathematical derivations, worked numerical examples, and comprehensive explanations. Be exhaustive; do not summarize or truncate."
+	inputTokens := countInputTokens(model, requestType, systemPrompt, promptContent)
+	fmt.Printf("Prepared %s request: estimated input tokens=%d", requestType, inputTokens)
+	if requestType == "chat" && maxOutputTokens > 0 {
+		fmt.Printf(", max output tokens=%d", maxOutputTokens)
+	}
+	fmt.Println()
 
 	// Create payloads based on request type
 	// For Bifrost: use "openai/" prefix
@@ -219,26 +220,27 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 			"model": model,
 		})
 	} else {
+		chatPayload := map[string]interface{}{
+			"messages": []map[string]string{
+				{
+					"role":    "system",
+					"content": systemPrompt,
+				},
+				{
+					"role":    "user",
+					"content": promptContent,
+				},
+			},
+			"model": model,
+		}
+		if maxOutputTokens > 0 {
+			chatPayload["max_tokens"] = maxOutputTokens
+		}
+
 		// Bifrost chat completion format (with openai/ prefix)
-		bifrostPayload, _ = sonic.Marshal(map[string]interface{}{
-			"messages": []map[string]string{
-				{
-					"role":    "user",
-					"content": promptContent,
-				},
-			},
-			"model": model,
-		})
+		bifrostPayload, _ = sonic.Marshal(chatPayload)
 		// OpenAI chat completion format (no prefix)
-		openaiPayload, _ = sonic.Marshal(map[string]interface{}{
-			"messages": []map[string]string{
-				{
-					"role":    "user",
-					"content": promptContent,
-				},
-			},
-			"model": model,
-		})
+		openaiPayload, _ = sonic.Marshal(chatPayload)
 	}
 
 	baseUrl := fmt.Sprintf("http://%s:%%s/%%s/", host) + apiPath
@@ -258,6 +260,8 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 			Payload:         openaiPayload,
 			PayloadTemplate: createTemplate(openaiPayload),
 			RequestType:     requestType,
+			InputTokens:     inputTokens,
+			MaxOutputTokens: maxOutputTokens,
 		},
 		{
 			Name:            "Bifrost",
@@ -266,6 +270,8 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 			Payload:         bifrostPayload,
 			PayloadTemplate: createTemplate(bifrostPayload),
 			RequestType:     requestType,
+			InputTokens:     inputTokens,
+			MaxOutputTokens: maxOutputTokens,
 		},
 		{
 			Name:            "Litellm",
@@ -274,6 +280,8 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 			Payload:         bifrostPayload, // Use bifrost payload format (with prefix)
 			PayloadTemplate: createTemplate(bifrostPayload),
 			RequestType:     requestType,
+			InputTokens:     inputTokens,
+			MaxOutputTokens: maxOutputTokens,
 		},
 		{
 			Name:            "Portkey",
@@ -282,10 +290,53 @@ func initializeProviders(bigPayload bool, model string, suffix string, apiPath s
 			Payload:         bifrostPayload, // Use bifrost payload format (with prefix)
 			PayloadTemplate: createTemplate(bifrostPayload),
 			RequestType:     requestType,
+			InputTokens:     inputTokens,
+			MaxOutputTokens: maxOutputTokens,
 		},
 	}
 
 	return providers
+}
+
+func buildLargeRiskManagementPrompt(repetitions int) string {
+	base := strings.Join([]string{
+		"Produce a comprehensive, book-length research report on modern portfolio risk management. Be exhaustive and include full derivations, proofs, and worked numerical examples throughout.",
+		"SECTION 1 - Tail Risk Metrics: Compare VaR and CVaR in complete mathematical detail. Derive both from first principles, prove coherence and sub-additivity properties, provide five concrete numerical examples with normal, Student-t, Pareto, empirical, and mixture return distributions, discuss historical estimation, Monte Carlo, and parametric approaches with full worked examples, and analyze behavior during the 2008 global financial crisis, 2011 European debt crisis, 2015 China shock, 2020 COVID crash, and 2022 rate shock.",
+		"SECTION 2 - Portfolio Construction: Derive the efficient frontier from first principles for constrained and unconstrained cases. Work through a complete 5-asset numerical example step by step, including the full covariance matrix, Lagrangian, KKT conditions, and corner portfolios. Compare Markowitz, Black-Litterman, risk parity, hierarchical risk parity, and factor-based approaches in full detail with worked examples for each.",
+		"SECTION 3 - Derivatives Pricing: Derive the Black-Scholes PDE from Ito's lemma in complete detail. Solve it in closed form. Price vanilla and exotic options including barrier, Asian, lookback, and digital options with numerical examples. Derive Heston, SABR, and local volatility models from first principles and compare them. Include a thorough treatment of the volatility surface, smile dynamics, and skew with market examples.",
+		"SECTION 4 - Stress Testing: Design a complete stress testing framework for a multi-asset portfolio. Include 10 historical scenarios with full profit-and-loss decomposition, 5 hypothetical scenarios, reverse stress testing methodology, sensitivity analysis, and Basel III / FRTB regulatory treatment. Work through each scenario numerically for a representative portfolio.",
+		"SECTION 5 - Risk-Adjusted Performance: Derive and compare Sharpe, Sortino, Calmar, Omega, Treynor, Jensen's alpha, and information ratio. For each, provide mathematical definition, assumptions, limitations, and a full numerical example. Demonstrate with a 36-month return series how rankings differ across metrics and what that implies.",
+		"SECTION 6 - Factor Models: Derive CAPM, Fama-French 3-factor, Carhart 4-factor, and Fama-French 5-factor models from first principles. Explain the economic intuition for each factor, provide empirical evidence, and work through a full factor regression for a hypothetical equity portfolio.",
+		"SECTION 7 - Credit Risk: Cover structural models such as Merton, reduced-form models, CDS pricing, CDO tranching, counterparty credit risk, and CVA/DVA/FVA with full derivations and numerical examples.",
+		"SECTION 8 - Liquidity Risk: Cover market liquidity risk, funding liquidity risk, liquidity-adjusted VaR, bid-ask spread modelling, market impact models, and regulatory liquidity requirements including LCR and NSFR with detailed examples.",
+		"SECTION 9 - Operational Implementation: Explain how a production risk system should orchestrate data ingestion, pricing, scenario generation, aggregation, caching, lineage, audit controls, error budgets, observability, and model governance at scale.",
+	}, "\n\n")
+
+	var builder strings.Builder
+	for i := 0; i < repetitions; i++ {
+		builder.WriteString(base)
+		builder.WriteString("\n\n")
+	}
+	return builder.String()
+}
+
+func countInputTokens(model string, requestType string, systemPrompt string, promptContent string) int {
+	tiktoken.SetBpeLoader(tiktokenloader.NewOfflineLoader())
+
+	encoding, err := tiktoken.EncodingForModel(model)
+	if err != nil {
+		encoding, err = tiktoken.GetEncoding("cl100k_base")
+		if err != nil {
+			log.Printf("Warning: could not initialize tokenizer: %v", err)
+			return 0
+		}
+	}
+
+	text := promptContent
+	if requestType == "chat" {
+		text = systemPrompt + "\n\n" + promptContent
+	}
+	return len(encoding.Encode(text, nil, nil))
 }
 
 func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int, rampUp bool, rampUpDuration int, debug bool) []BenchmarkResult {
@@ -434,12 +485,18 @@ func runBenchmarks(providers []Provider, rate int, users int, duration int, time
 			Metrics:           &metrics,
 			ServerMemoryStats: serverMemStatsCopy,
 			DropReasons:       dropReasons,
+			InputTokens:       provider.InputTokens,
+			MaxOutputTokens:   provider.MaxOutputTokens,
 		})
 
 		fmt.Println(metrics.StatusCodes) // Print status code distribution to console
 
 		// Print a summary of the benchmark results to the console.
 		fmt.Printf("Results for %s:\n", provider.Name)
+		fmt.Printf("  Input Tokens / Request: %d\n", provider.InputTokens)
+		if provider.RequestType == "chat" && provider.MaxOutputTokens > 0 {
+			fmt.Printf("  Max Output Tokens / Request: %d\n", provider.MaxOutputTokens)
+		}
 		fmt.Printf("  Requests: %d\n", metrics.Requests)
 		fmt.Printf("  Request Rate: %.2f/s\n", metrics.Rate)
 		fmt.Printf("  Success Rate: %.2f%%\n", 100.0*metrics.Success)
@@ -668,6 +725,8 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 		ServerPeakMemoryMB float64        `json:"server_peak_memory_mb"` // Peak server RSS memory during benchmark
 		ServerAvgMemoryMB  float64        `json:"server_avg_memory_mb"`  // Average server RSS memory during benchmark
 		DropReasons        map[string]int `json:"drop_reasons"`          // Counts of reasons for dropped/failed requests
+		InputTokens        int            `json:"input_tokens"`          // Estimated input tokens per request
+		MaxOutputTokens    int            `json:"max_output_tokens"`     // Requested max output tokens per chat request
 	}
 
 	// Create a map with provider names as keys
@@ -723,6 +782,8 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 			ServerPeakMemoryMB: float64(peakMem) / (1024 * 1024),
 			ServerAvgMemoryMB:  avgMem,
 			DropReasons:        res.DropReasons,
+			InputTokens:        res.InputTokens,
+			MaxOutputTokens:    res.MaxOutputTokens,
 		}
 	}
 
