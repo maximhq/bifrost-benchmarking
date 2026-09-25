@@ -20,7 +20,7 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **Per-Key Latency Targeting**: `-latency-auth-keys` scopes latency/jitter to specific API keys — listed keys are slow, all others respond instantly (mirrors `-tpm-auth-keys`). Entries can override the global config per key with `key=latencyMs`, `key=latencyMs:jitterMs`, or a percentile distribution `key=p50:p90:p95:p99` (sampled so the observed percentiles match; mutually exclusive with the jitter form)
 - **Dynamic Per-Key Latency Behaviors**: Layer time- and probability-varying latency on top of the static per-key config to exercise load-balancer/anomaly-detection logic — `-latency-spike-keys` injects sparse latency outliers, `-latency-ramp-keys` drifts the base latency linearly over time, and `-latency-step-keys` abruptly steps the base latency at a chosen second
 - **Per-Key Failure Targeting**: `-failure-auth-keys` scopes the failure percentage to specific API keys — listed keys fail at the configured rate, all others always succeed. Entries can override the global config per key with `key=percent` or `key=percent:jitter`
-- **Models List Endpoint**: `GET /v1/models` (and `/models`) returns an OpenAI-shaped model list configurable via `-models`, so gateway-side model discovery works against the mocker
+- **Models List Endpoint**: `GET /v1/models` (and `/models`) is opt-in: only exposed when `-models` is set, returning an OpenAI-shaped list of exactly those ids (empty list if set to `""`). When set, `-models` is also an allowlist — inference requests for unlisted models get `404 model_not_found`. This lets gateway-side model discovery and unknown-model handling be tested against the mocker
 - **Per-Chunk Latency**: For streaming responses, latency is distributed across chunks using deadline-based scheduling so end-to-end wall-clock matches `-latency` regardless of per-chunk serialization overhead
 - **Configurable Streaming Granularity**: `-tokens-per-chunk` controls how many words are batched into each SSE delta (default `5`); higher values reduce envelope overhead and more closely match real provider behavior, lower values stress per-chunk parsing. Large payload streams scale chunk size proportionally to keep SSE write counts bounded
 - **Variable Payload Sizes**: Support for both small and large response payloads via the `-big-payload` flag; large text responses use realistic paragraphs between 20k and 50k generated tokens
@@ -153,7 +153,8 @@ go run main.go -port 8080 -tpm 30
 # Returns 429 responses after 30 seconds to simulate rate limits (stays on forever)
 
 go run main.go -port 8080 -tpm 30 -tpm-duration 60
-# Returns 429 responses only between 30s and 90s, then recovers
+# Returns 429 responses only between 30s and 90s, then recovers.
+# Each 429 carries a Retry-After header with the seconds left until 90s
 
 go run main.go -port 8080 -tpm 30 -tpm-auth-keys "key-A,key-B"
 # Only key-A and key-B requests get rate-limited; all other keys are unaffected
@@ -226,7 +227,7 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_LATENCY_RAMP_KEYS`: Comma-separated per-key linear base-latency drift in ms added per minute elapsed (e.g. `slow-key=2000` → +2000ms each minute since server start). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `MOCKER_LATENCY_STEP_KEYS`: Comma-separated per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `MOCKER_FAILURE_AUTH_KEYS`: Comma-separated bearer token values subject to the failure percentage; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `MOCKER_FAILURE_PERCENT`/`MOCKER_FAILURE_JITTER`. `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
-- `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
+- `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (unset by default — the list-models endpoint is only exposed when this is set; set but empty returns an empty list)
 - `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
 - `MOCKER_INPUT_TOKENS`: Fixed input/prompt token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
 - `MOCKER_OUTPUT_TOKENS`: Fixed output/completion token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
@@ -236,7 +237,7 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_FAILURE_JITTER`: Maximum jitter in percentage points (default: `0`)
 - `MOCKER_WITH_ERRORS`: Enable random provider-specific errors (default: `false`)
 - `MOCKER_TPM`: Seconds after which to trigger TPM (429) scenarios (default: `0`, disabled)
-- `MOCKER_TPM_DURATION`: Duration in seconds for the TPM window; TPM is active from `MOCKER_TPM` to `MOCKER_TPM + MOCKER_TPM_DURATION` seconds (default: `0`, active until server stop)
+- `MOCKER_TPM_DURATION`: Duration in seconds for the TPM window; TPM is active from `MOCKER_TPM` to `MOCKER_TPM + MOCKER_TPM_DURATION` seconds. While the window is active, 429s include a `Retry-After` header with the seconds remaining (default: `0`, active until server stop, no `Retry-After`)
 - `MOCKER_TPM_AUTH_KEYS`: Comma-separated bearer token values that trigger TPM; the `Bearer ` prefix is stripped automatically before comparison, so pass raw tokens (e.g. `key-A,key-B`); other keys are unaffected (default: `""`, all requests)
 - `MOCKER_LOG_RAW`: Log raw HTTP requests and responses - set to `true`, `1`, `false`, or `0` (default: `false`)
 
@@ -296,7 +297,7 @@ services:
 - `-latency-ramp-keys <keys>`: Per-key linear base-latency drift in ms added per minute elapsed (e.g. `slow-key=2000` → +2000ms each minute since server start). Adjusts the base before jitter so it shifts the distribution an LB should track. The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `-latency-step-keys <keys>`: Per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). The `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `-failure-auth-keys <keys>`: Comma-separated bearer token values subject to `-failure-percent`; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `-failure-percent`/`-failure-jitter`. The `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
-- `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
+- `-models <ids>`: Comma-separated model ids returned by `GET /v1/models` (unset by default — the list-models endpoint is only exposed when this is set; set but empty returns an empty list)
 - `-big-payload`: Use large text response payloads between 20k and 50k generated tokens instead of small ones (default: `false`)
 - `-input-tokens <count>`: Fixed input/prompt token count to report in every `usage` block (across OpenAI, Anthropic, Gemini, and Bedrock shapes, streaming and non-streaming). Negative disables it (default: `-1`, random/derived per request)
 - `-output-tokens <count>`: Fixed output/completion token count to report in every `usage` block. Negative disables it (default: `-1`, random/derived per request)
@@ -305,7 +306,7 @@ services:
 - `-failure-jitter <percentage_points>`: Maximum jitter in percentage points to add to failure rate, creating a range of ±failure-jitter (default: `0`)
 - `-with-errors` / `-witherrors`: Enable random provider-specific error payloads/codes. Defaults to 20% error rate when enabled unless `-failure-percent` is set
 - `-tpm <seconds>`: Seconds after which to trigger TPM (429) scenarios (default: `0`, disabled)
-- `-tpm-duration <seconds>`: Duration in seconds for the TPM window. TPM is active from `-tpm` to `-tpm + -tpm-duration` seconds; after the window closes requests succeed again (default: `0`, active until server stop)
+- `-tpm-duration <seconds>`: Duration in seconds for the TPM window. TPM is active from `-tpm` to `-tpm + -tpm-duration` seconds; after the window closes requests succeed again. 429s during the window carry a `Retry-After` header with the seconds remaining (default: `0`, active until server stop, no `Retry-After`)
 - `-tpm-auth-keys <keys>`: Comma-separated bearer token values that should be rate-limited. The `Bearer ` prefix is stripped automatically before comparison, so pass the raw token (e.g. `"key-A,key-B"`). Requests with any other key are unaffected (default: `""`, all requests)
 - `-log-raw`: Log raw HTTP request and response bodies for debugging and inspection (default: `false`)
 
@@ -323,7 +324,9 @@ The mock server supports the following endpoints:
 
 - `GET /v1/models` - OpenAI-compatible model list (also `/models`, `/openai/v1/models`, `/openai/models`)
 
-Returns the model ids configured via `-models` / `MOCKER_MODELS` in the standard OpenAI list shape (`{"object":"list","data":[{"id":…,"object":"model",…}]}`). The endpoint validates auth (when `-auth` is set) but deliberately skips latency, failure, and TPM simulation — those flags shape inference behavior, while model discovery stays deterministic so gateway-side model catalogs can always populate.
+Returns exactly the model ids configured via `-models` / `MOCKER_MODELS` in the standard OpenAI list shape (`{"object":"list","data":[{"id":…,"object":"model",…}]}`). The endpoint is only exposed when `-models` / `MOCKER_MODELS` is set; otherwise every list-models path returns 404. Setting it to an empty value (`-models ""` or `MOCKER_MODELS=`) exposes the endpoint with `{"object":"list","data":[]}`.
+
+When `-models` is set it also acts as an allowlist for inference: any chat completions, responses, embeddings, Anthropic messages, GenAI, or Bedrock converse request for a model not in the list gets a `404` `model_not_found` error (checked before rate-limit and failure simulation). Provider-prefixed requests (e.g. `openai/gpt-4o`) match either the bare id (`gpt-4o`) or the prefixed form. If `-models` is set but empty, every inference request gets `404`. When `-models` is unset, any model is accepted. The endpoint validates auth (when `-auth` is set) but deliberately skips latency, failure, and TPM simulation — those flags shape inference behavior, while model discovery stays deterministic so gateway-side model catalogs can always populate.
 
 ### Chat Completions API
 
@@ -516,7 +519,7 @@ Three flags control TPM (429) simulation:
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
 | `-tpm <seconds>` | `MOCKER_TPM` | `0` (disabled) | Seconds after server start when rate limiting begins |
-| `-tpm-duration <seconds>` | `MOCKER_TPM_DURATION` | `0` (forever) | Duration of the rate-limit window; TPM is active from `tpm` to `tpm + tpm-duration` seconds |
+| `-tpm-duration <seconds>` | `MOCKER_TPM_DURATION` | `0` (forever) | Duration of the rate-limit window; TPM is active from `tpm` to `tpm + tpm-duration` seconds; 429s include `Retry-After` with the seconds remaining |
 | `-tpm-auth-keys <keys>` | `MOCKER_TPM_AUTH_KEYS` | `""` (all) | Comma-separated raw bearer token values to rate-limit (`Bearer ` prefix stripped automatically); all other keys are unaffected |
 
 **Behaviour summary:**

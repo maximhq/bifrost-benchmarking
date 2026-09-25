@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -172,19 +173,6 @@ type OpenAIResponsesResponse struct {
 	Usage   schemas.LLMUsage            `json:"usage"`
 }
 
-// OpenAI List Models API structures
-type OpenAIModel struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int    `json:"created"`
-	OwnedBy string `json:"owned_by"`
-}
-
-type OpenAIModelsResponse struct {
-	Object string        `json:"object"` // "list"
-	Data   []OpenAIModel `json:"data"`
-}
-
 // OpenAI Embeddings API structures
 type OpenAIEmbeddingData struct {
 	Object    string    `json:"object"`    // "embedding"
@@ -301,6 +289,8 @@ var (
 	tpmDuration        int
 	tpmAuthKeys        string
 	modelsList         string
+	modelsEnabled      bool // true when -models / MOCKER_MODELS was explicitly set
+	modelSet           map[string]bool
 	logRaw             bool
 	rateLimitedKeys    string
 	rateLimitedKeyMap  map[string]bool
@@ -399,7 +389,7 @@ func init() {
 	flag.IntVar(&tpm, "tpm", getEnvInt("MOCKER_TPM", 0), "Seconds after which to trigger TPM (429) scenarios (0 = disabled)")
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
-	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
+	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", ""), "Comma-separated model ids returned by GET /v1/models; the endpoint is only exposed when this is set (set but empty = empty list)")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
 	flag.StringVar(&latencySpikeKeys, "latency-spike-keys", getEnvString("MOCKER_LATENCY_SPIKE_KEYS", ""), "Per-key sparse latency spikes as key=pct:mult (e.g. 'slow-key=10:5' → 10% of requests get 5x latency). Tests outlier rejection.")
@@ -1079,11 +1069,14 @@ func writeSSEDataLine(w *bufio.Writer, payload string) error {
 	return w.Flush()
 }
 
-// shouldTriggerTPM checks if TPM (429) scenario should be triggered for the given auth header value.
-func shouldTriggerTPM(authHeader string) bool {
+// shouldTriggerTPM checks if TPM (429) scenario should be triggered for the request's
+// Authorization header. When the TPM window is bounded by -tpm-duration, it also sets a
+// Retry-After header with the whole seconds remaining until the window closes.
+func shouldTriggerTPM(ctx *fasthttp.RequestCtx) bool {
 	if tpm <= 0 || startTime.IsZero() {
 		return false
 	}
+	authHeader := string(ctx.Request.Header.Peek("Authorization"))
 	if tpmAuthKeys != "" {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		matched := false
@@ -1108,6 +1101,14 @@ func shouldTriggerTPM(authHeader string) bool {
 		log.Printf("TPM (429) scenario triggered after %d seconds", elapsedSeconds)
 		tpmTriggeredLogged = true
 	}
+	if tpmDuration > 0 {
+		windowEnd := startTime.Add(time.Duration(tpm+tpmDuration) * time.Second)
+		retryAfter := int(math.Ceil(time.Until(windowEnd).Seconds()))
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+		ctx.Response.Header.Set("Retry-After", strconv.Itoa(retryAfter))
+	}
 	return true
 }
 
@@ -1126,6 +1127,29 @@ func sendErrorResponse(ctx *fasthttp.RequestCtx, statusCode int, message string)
 	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(errorResp); err != nil {
 		log.Printf("Error encoding error response: %v", err)
 	}
+}
+
+// rejectUnknownModel sends a 404 model_not_found response and returns true when
+// -models is set and the requested model is not in it. Provider-prefixed
+// requests match either the bare model id or the "provider/model" form.
+func rejectUnknownModel(ctx *fasthttp.RequestCtx, provider, model string) bool {
+	if !modelsEnabled || modelSet[model] || (provider != "" && modelSet[provider+"/"+model]) {
+		return false
+	}
+	errorResp := OpenAIError{
+		EventID: StrPtr("evt_mock_model_not_found"),
+		Error: &ErrorField{
+			Type:    StrPtr("invalid_request_error"),
+			Code:    StrPtr("model_not_found"),
+			Message: fmt.Sprintf("The model `%s` does not exist or you do not have access to it.", model),
+		},
+	}
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusNotFound)
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(errorResp); err != nil {
+		log.Printf("Error encoding model_not_found response: %v", err)
+	}
+	return true
 }
 
 // sendRateLimitResponse sends a 429 rate_limit_error response
@@ -1436,8 +1460,11 @@ func mockChatCompletionsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	provider, model, stream := parseModelFromRequest(ctx)
+	if rejectUnknownModel(ctx, provider, model) {
+		return
+	}
 
-	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(ctx) {
 		sendRateLimitResponse(ctx)
 		return
 	}
@@ -1513,8 +1540,11 @@ func mockResponsesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
+	if rejectUnknownModel(ctx, provider, model) {
+		return
+	}
 
-	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(ctx) {
 		sendRateLimitResponse(ctx)
 		return
 	}
@@ -1580,8 +1610,11 @@ func mockEmbeddingsHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	provider, model, _ := parseModelFromRequest(ctx)
+	if rejectUnknownModel(ctx, provider, model) {
+		return
+	}
 
-	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(ctx) {
 		sendRateLimitResponse(ctx)
 		return
 	}
@@ -1652,8 +1685,11 @@ func mockAnthropicMessagesHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	provider, model, stream := parseAnthropicModelFromRequest(ctx)
+	if rejectUnknownModel(ctx, provider, model) {
+		return
+	}
 
-	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+	if shouldTriggerTPM(ctx) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1713,8 +1749,11 @@ func mockGenAIGenerateContentHandler(ctx *fasthttp.RequestCtx) {
 	}
 	provider, model := parseGenAIModelFromPath(string(ctx.Path()))
 	isStreamPath := strings.Contains(string(ctx.Path()), ":streamGenerateContent")
+	if rejectUnknownModel(ctx, provider, model) {
+		return
+	}
 
-	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+	if shouldTriggerTPM(ctx) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1778,8 +1817,11 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	model, isConverse, isStream := parseBedrockModelFromPath(string(ctx.Path()))
+	if rejectUnknownModel(ctx, "", model) {
+		return
+	}
 
-	if shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+	if shouldTriggerTPM(ctx) {
 		sendErrorResponse(ctx, fasthttp.StatusTooManyRequests, "Rate limit exceeded. Please retry after some time.")
 		return
 	}
@@ -1833,41 +1875,6 @@ func mockBedrockConverseHandler(ctx *fasthttp.RequestCtx) {
 	}
 }
 
-func mockModelsHandler(ctx *fasthttp.RequestCtx) {
-	if !checkAuth(ctx) {
-		return
-	}
-
-	if string(ctx.Method()) != "GET" {
-		sendErrorResponse(ctx, fasthttp.StatusMethodNotAllowed, "Only GET method is allowed")
-		return
-	}
-
-	now := int(time.Now().Unix())
-	models := []OpenAIModel{
-		{ID: "gpt-4o", Object: "model", Created: now, OwnedBy: "openai"},
-		{ID: "gpt-4o-mini", Object: "model", Created: now, OwnedBy: "openai"},
-		{ID: "gpt-4", Object: "model", Created: now, OwnedBy: "openai"},
-		{ID: "gpt-3.5-turbo", Object: "model", Created: now, OwnedBy: "openai"},
-		{ID: "text-embedding-ada-002", Object: "model", Created: now, OwnedBy: "openai"},
-		{ID: "text-embedding-3-small", Object: "model", Created: now, OwnedBy: "openai"},
-		{ID: "text-embedding-3-large", Object: "model", Created: now, OwnedBy: "openai"},
-	}
-
-	resp := OpenAIModelsResponse{
-		Object: "list",
-		Data:   models,
-	}
-
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	if err := json.NewEncoder(ctx).Encode(resp); err != nil {
-		log.Printf("Error encoding models response: %v", err)
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		ctx.SetBodyString("Failed to encode response")
-	}
-}
-
 func healthCheckHandler(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
@@ -1887,7 +1894,8 @@ type OpenAIModelsListResponse struct {
 }
 
 // mockListModelsHandler serves GET /v1/models with the ids configured via
-// -models. It validates auth but deliberately skips latency, failure, and TPM
+// -models. It is only routed when -models / MOCKER_MODELS is explicitly set
+// (an explicitly empty value yields an empty list). It validates auth but deliberately skips latency, failure, and TPM
 // simulation: those flags shape inference behavior, while model discovery
 // should stay deterministic so gateway-side model catalogs can always populate.
 func mockListModelsHandler(ctx *fasthttp.RequestCtx) {
@@ -1978,7 +1986,12 @@ func router(ctx *fasthttp.RequestCtx) {
 	switch path {
 	case "/health":
 		healthCheckHandler(ctx)
-	case "/models", "/openai/models", "/openai/v1/models":
+	case "/models", "/v1/models", "/openai/models", "/openai/v1/models":
+		if !modelsEnabled {
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			ctx.SetBodyString("Not found")
+			return
+		}
 		mockListModelsHandler(ctx)
 	case "/chat/completions", "/v1/chat/completions", "/openai/chat/completions", "/openai/v1/chat/completions":
 		mockChatCompletionsHandler(ctx)
@@ -1988,8 +2001,6 @@ func router(ctx *fasthttp.RequestCtx) {
 		mockEmbeddingsHandler(ctx)
 	case "/anthropic/v1/messages", "/anthropic/messages", "/v1/messages":
 		mockAnthropicMessagesHandler(ctx)
-	case "/v1/models":
-		mockModelsHandler(ctx)
 	default:
 		if _, isConverse, _ := parseBedrockModelFromPath(path); isConverse {
 			mockBedrockConverseHandler(ctx)
@@ -2011,6 +2022,24 @@ func router(ctx *fasthttp.RequestCtx) {
 
 func main() {
 	flag.Parse()
+
+	// List Models is opt-in: expose it only when -models or MOCKER_MODELS is
+	// present, even if its value is empty.
+	_, modelsEnabled = os.LookupEnv("MOCKER_MODELS")
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "models" {
+			modelsEnabled = true
+		}
+	})
+	modelSet = make(map[string]bool)
+	for _, id := range strings.Split(modelsList, ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			modelSet[id] = true
+		}
+	}
+	if modelsEnabled {
+		log.Printf("Model allowlist enabled: %d model(s); unknown models get 404", len(modelSet))
+	}
 
 	startTime = time.Now()
 
