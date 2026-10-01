@@ -1,11 +1,45 @@
 package main
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
+
+func TestSystemOneJevDecision(t *testing.T) {
+	previousTier := systemOneTier
+	systemOneTier = "MEDIUM"
+	defer func() { systemOneTier = previousTier }()
+
+	var request fasthttp.Request
+	request.SetRequestURI("/v1/systemone")
+	request.Header.SetMethod(fasthttp.MethodPost)
+	request.SetBodyString(`{"state":[{"role":"user","content":"Hello"}],"model":"jev-latest","questions":{"complexity_tier":{"type":"choice"}}}`)
+	var ctx fasthttp.RequestCtx
+	ctx.Init(&request, nil, nil)
+	router(&ctx)
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusOK {
+		t.Fatalf("status = %d, body = %s", got, ctx.Response.Body())
+	}
+	var response SystemOneResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Model != "jev-latest" || response.Answers["complexity_tier"] != (SystemOneAnswer{Type: "choice", Choice: "MEDIUM"}) {
+		t.Fatalf("unexpected systemone response: %+v", response)
+	}
+
+	request.SetBodyString(`{"state":[{"role":"user","content":"Hello"}],"model":"jev-latest","questions":{"other":{"type":"choice"}}}`)
+	ctx.Init(&request, nil, nil)
+	router(&ctx)
+	if got := ctx.Response.StatusCode(); got != fasthttp.StatusUnprocessableEntity {
+		t.Fatalf("invalid question status = %d, body = %s", got, ctx.Response.Body())
+	}
+}
 
 func TestProviderAliasesCoverConfiguredProviders(t *testing.T) {
 	requiredProviders := []string{

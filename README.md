@@ -10,8 +10,9 @@ Benchmarking and load-testing tools for [Bifrost](https://github.com/maximhq/bif
 | [`hitter/`](hitter/README.md) | Standalone load generator for chat completions | Load-test a single Bifrost deployment with realistic traffic: multiple models/providers, streaming, virtual keys, PDF attachments |
 | [`mocker/`](mocker/README.md) | Mock LLM provider server (fasthttp) | Simulate OpenAI / Anthropic / Gemini / Bedrock endpoints with configurable latency, failures, and rate limits — no API costs, no provider noise |
 | [`mcp-code-mode-benchmark/`](mcp-code-mode-benchmark/README.md) | MCP Code Mode benchmark (Python) | Reproduce our token/latency/pass-rate numbers for [Bifrost's MCP Code Mode](https://docs.getbifrost.ai/mcp/code-mode) |
+| [`model-routing-benchmark/`](model-routing-benchmark/README.md) | Bifrost model-routing benchmarks | Compare fixed Opus 5.5, Bifrost JEV, LiteLLM heuristic v2, and Bifrost semantic routing on Terminal-Bench 2.1 and RouterArena |
 
-The gateway benchmark is documented in full below. The other three tools each have their own README — follow the links above.
+The gateway benchmark is documented in full below. The focused benchmark tools each have their own README — follow the links above.
 
 **Typical setup:** run the **mocker** as a stand-in provider, point the gateways at it, and drive load with **`benchmark.go`** (to compare gateways) or the **hitter** (to stress Bifrost in isolation). Using the mocker isolates *gateway overhead* from provider latency and keeps runs free and reproducible.
 
@@ -167,6 +168,9 @@ pkg/concurrent/           # semaphore-based concurrency engine for -users mode
 hitter/                   # load generator for Bifrost — see hitter/README.md
 mocker/                   # mock LLM provider server — see mocker/README.md
 mcp-code-mode-benchmark/  # MCP Code Mode benchmark — see its README.md
+model-routing-benchmark/  # model-routing reports and runners, organized by benchmark
+  terminal-bench/         # Terminal-Bench 2.1 results and 77-task runner
+  router-arena/           # RouterArena results and harness
 10kbprompt.txt            # prompt fixtures for -prompt-file / large-payload runs
 50kbprompt.txt
 ```
