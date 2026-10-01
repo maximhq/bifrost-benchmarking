@@ -9,6 +9,7 @@ This directory contains a high-performance mock server built with [fasthttp](htt
 - **OpenAI API Compatibility**: Responds to `POST` requests at `/v1/chat/completions` and `/chat/completions` with realistic response structure
 - **OpenAI Responses API Support**: Supports the `/v1/responses` and `/responses` endpoints for OpenAI's responses API format
 - **OpenAI Embeddings API Support**: Supports the `/v1/embeddings` and `/embeddings` endpoints for embeddings
+- **Jev Decision API Support**: `POST /v1/systemone` returns a fixed `complexity_tier` choice for `jev-latest` requests; configure the tier with `-systemone-tier`
 - **Anthropic Messages API Support**: Supports `POST /anthropic/v1/messages` (and `/anthropic/messages`)
 - **GenAI API Support**: Supports `POST /models/{model}:generateContent`, `POST /v1beta/models/{model}:generateContent`, `POST /v1/models/{model}:generateContent`, and `/genai/...` equivalents, including `:streamGenerateContent`
 - **Bedrock Converse API Support**: Supports `POST /model/{model}/converse` and `POST /model/{model}/converse-stream` (also with `/bedrock` prefix)
@@ -50,6 +51,14 @@ cd mocker
 # Run the mock server (default: port 8000, 0ms latency)
 go run main.go
 ```
+
+For a Jev routing load test, one mocker instance serves both OpenAI chat completions and Typesafe decisions on port 8000. Restart an older mocker process so it picks up the new endpoint, then run from the `mocker` directory:
+
+```bash
+go run main.go -port 8000 -systemone-tier SIMPLE
+```
+
+Point both the gateway's Typesafe and OpenAI provider base URLs to `http://localhost:8000`. The `/v1/systemone` response includes a synthetic choice and no usage; it measures the gateway path, not Jev classification quality or live provider cost. `-systemone-tier` also accepts `MEDIUM` or `COMPLEX`. If you need independent mock latencies, run a second instance on port 8001 and point only Typesafe at it; `-latency` applies to every endpoint on an instance.
 
 ### 2. Advanced Usage Examples
 
@@ -226,6 +235,7 @@ All configuration options can be set via environment variables, which is especia
 - `MOCKER_LATENCY_STEP_KEYS`: Comma-separated per-key abrupt base-latency step as `key=atSec:toMs` (e.g. `slow-key=30:8000` → at 30s elapsed the base latency jumps to 8000ms). `Bearer ` prefix is stripped automatically (default: `""`, disabled)
 - `MOCKER_FAILURE_AUTH_KEYS`: Comma-separated bearer token values subject to the failure percentage; all other keys always succeed. Entries may carry a per-key override as `key=percent` or `key=percent:jitter` (e.g. `slow-key=2,fast-key=10:3,key-C`); bare keys use the global `MOCKER_FAILURE_PERCENT`/`MOCKER_FAILURE_JITTER`. `Bearer ` prefix is stripped automatically (default: `""`, failures apply to all requests)
 - `MOCKER_MODELS`: Comma-separated model ids returned by `GET /v1/models` (default: `gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash`)
+- `MOCKER_SYSTEMONE_TIER`: Fixed `complexity_tier` answer for `POST /v1/systemone`: `SIMPLE`, `MEDIUM`, or `COMPLEX` (default: `SIMPLE`)
 - `MOCKER_TOKENS_PER_CHUNK`: Words batched into each SSE delta when streaming; must be `>=1` (default: `5`)
 - `MOCKER_INPUT_TOKENS`: Fixed input/prompt token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)
 - `MOCKER_OUTPUT_TOKENS`: Fixed output/completion token count to report in every `usage` block; negative disables (default: `-1`, random/derived per request)

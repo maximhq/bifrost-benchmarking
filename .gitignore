@@ -10,3 +10,6 @@ test-*.pdf
 10mbprompt.txt
 hitter/hitter
 benchmark
+# Model-routing benchmark outputs; keep generated prompts, answers, and run logs local.
+model-routing-benchmark/terminal-bench/jobs/
+model-routing-benchmark/router-arena/runs/
