@@ -1,6 +1,8 @@
 # Bifrost Benchmarking
 
-Benchmarking and load-testing tools for [Bifrost](https://github.com/maximhq/bifrost), the fastest and most scalable AI gateway. This is the companion repo to [Run Your Own Benchmarks](https://docs.getbifrost.ai/benchmarking/run-your-own-benchmarks) — everything here is open source, and PRs are welcome.
+Reproducible AI gateway benchmarks: [Bifrost](https://github.com/maximhq/bifrost) vs LiteLLM and Portkey on latency percentiles, throughput and memory, using Vegeta and a mock LLM provider. Includes a load generator and the MCP Code Mode benchmark. Published runs: 9.5x throughput and 54x lower P99 than LiteLLM.
+
+This is the companion repo to [Run Your Own Benchmarks](https://docs.getbifrost.ai/benchmarking/run-your-own-benchmarks) — everything here is open source, and PRs are welcome.
 
 ## What's in this repo
 
