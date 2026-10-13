@@ -47,6 +47,26 @@ type GenericRequest struct {
 	Stream bool   `json:"stream"`
 }
 
+type SystemOneRequest struct {
+	State     json.RawMessage              `json:"state"`
+	Model     string                       `json:"model"`
+	Questions map[string]SystemOneQuestion `json:"questions"`
+}
+
+type SystemOneQuestion struct {
+	Type string `json:"type"`
+}
+
+type SystemOneResponse struct {
+	Model   string                     `json:"model"`
+	Answers map[string]SystemOneAnswer `json:"answers"`
+}
+
+type SystemOneAnswer struct {
+	Type   string `json:"type"`
+	Choice string `json:"choice"`
+}
+
 // ProviderAliases maps provider aliases to canonical provider IDs.
 var ProviderAliases = map[string]string{
 	"openai":      "openai",
@@ -301,6 +321,7 @@ var (
 	tpmDuration        int
 	tpmAuthKeys        string
 	modelsList         string
+	systemOneTier      string
 	logRaw             bool
 	rateLimitedKeys    string
 	rateLimitedKeyMap  map[string]bool
@@ -400,6 +421,7 @@ func init() {
 	flag.IntVar(&tpmDuration, "tpm-duration", getEnvInt("MOCKER_TPM_DURATION", 0), "Duration in seconds for TPM window, i.e. tpm to tpm+tpm-duration (0 = until server stop)")
 	flag.StringVar(&tpmAuthKeys, "tpm-auth-keys", getEnvString("MOCKER_TPM_AUTH_KEYS", ""), "Comma-separated Authorization header values that trigger TPM (empty = all requests)")
 	flag.StringVar(&modelsList, "models", getEnvString("MOCKER_MODELS", "gpt-4o-mini,gpt-4o,claude-3-5-sonnet-latest,gemini-2.0-flash"), "Comma-separated model ids returned by GET /v1/models")
+	flag.StringVar(&systemOneTier, "systemone-tier", getEnvString("MOCKER_SYSTEMONE_TIER", "SIMPLE"), "Fixed Jev complexity tier returned by POST /v1/systemone (SIMPLE, MEDIUM, or COMPLEX)")
 	flag.BoolVar(&logRaw, "log-raw", getEnvBool("MOCKER_LOG_RAW", false), "Log raw request and response bodies")
 	flag.StringVar(&rateLimitedKeys, "rate-limited-keys", getEnvString("MOCKER_RATE_LIMITED_KEYS", ""), "Comma-separated list of Authorization header values that always receive 429 (e.g. 'Bearer key-1,Bearer key-2')")
 	flag.StringVar(&latencySpikeKeys, "latency-spike-keys", getEnvString("MOCKER_LATENCY_SPIKE_KEYS", ""), "Per-key sparse latency spikes as key=pct:mult (e.g. 'slow-key=10:5' → 10% of requests get 5x latency). Tests outlier rejection.")
@@ -1970,6 +1992,40 @@ func logRawResponse(ctx *fasthttp.RequestCtx) {
 	log.Printf("--- End Response ---")
 }
 
+func mockSystemOneHandler(ctx *fasthttp.RequestCtx) {
+	if !checkAuth(ctx) || !checkMethod(ctx) {
+		return
+	}
+	var req SystemOneRequest
+	if err := sonic.Unmarshal(ctx.Request.Body(), &req); err != nil ||
+		req.Model != "jev-latest" || len(req.State) == 0 || string(req.State) == "null" ||
+		len(req.Questions) != 1 || req.Questions["complexity_tier"].Type != "choice" {
+		ctx.SetContentType("application/json")
+		ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
+		ctx.SetBodyString(`{"detail":"expected a jev-latest complexity_tier choice request with state"}`)
+		return
+	}
+	if isKeyRateLimited(ctx) || shouldTriggerTPM(string(ctx.Request.Header.Peek("Authorization"))) {
+		sendRateLimitResponse(ctx)
+		return
+	}
+	if shouldFail(string(ctx.Request.Header.Peek("Authorization"))) {
+		sendErrorResponse(ctx, fasthttp.StatusInternalServerError, "Mock Jev decision failed")
+		return
+	}
+	simulateLatency(string(ctx.Request.Header.Peek("Authorization")))
+	response := SystemOneResponse{
+		Model:   req.Model,
+		Answers: map[string]SystemOneAnswer{"complexity_tier": {Type: "choice", Choice: systemOneTier}},
+	}
+	ctx.SetContentType("application/json")
+	if err := sonic.ConfigDefault.NewEncoder(ctx).Encode(response); err != nil {
+		log.Printf("Error encoding systemone response: %v", err)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetBodyString("Failed to encode response")
+	}
+}
+
 // router handles routing requests to appropriate handlers
 func router(ctx *fasthttp.RequestCtx) {
 	logRawRequest(ctx)
@@ -1986,6 +2042,8 @@ func router(ctx *fasthttp.RequestCtx) {
 		mockResponsesHandler(ctx)
 	case "/embeddings", "/v1/embeddings", "/openai/embeddings", "/openai/v1/embeddings":
 		mockEmbeddingsHandler(ctx)
+	case "/v1/systemone":
+		mockSystemOneHandler(ctx)
 	case "/anthropic/v1/messages", "/anthropic/messages", "/v1/messages":
 		mockAnthropicMessagesHandler(ctx)
 	case "/v1/models":
@@ -2011,6 +2069,12 @@ func router(ctx *fasthttp.RequestCtx) {
 
 func main() {
 	flag.Parse()
+	systemOneTier = strings.ToUpper(strings.TrimSpace(systemOneTier))
+	switch systemOneTier {
+	case "SIMPLE", "MEDIUM", "COMPLEX":
+	default:
+		log.Fatalf("invalid -systemone-tier %q: expected SIMPLE, MEDIUM, or COMPLEX", systemOneTier)
+	}
 
 	startTime = time.Now()
 
