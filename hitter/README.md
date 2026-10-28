@@ -77,6 +77,8 @@ go run main.go [flags]
 | `--virtual-key` | string   | `""`                                        | Virtual API key for authentication           |
 | `--pdf`         | string   | `""`                                        | Path to a PDF to attach as a multimodal `file` content block (enables attachment mode) |
 | `--prompt`      | string   | `""`                                        | Override the user prompt text (defaults to a random prompt, or a fixed summarize prompt in `--pdf` mode) |
+| `--client-cert` | string | `""`                                        | PEM client certificate for mTLS (requires `--client-key` and an `https://` URL) |
+| `--client-key`  | string   | `""`                                        | PEM private key for `--client-cert`          |
 
 ## Examples
 
@@ -166,6 +168,21 @@ Use `--prompt` to override the default "Summarize the attached PDF document in d
 ```bash
 ./run_load_test.sh --url http://localhost:8080/v1/chat/completions --virtual-key sk-bf-your-key
 ```
+
+### 8. mTLS Test
+
+Present a client certificate to a gateway that requires mutual TLS. The server certificate is verified against the system trust store; to trust a private CA, set `SSL_CERT_FILE` (or `SSL_CERT_DIR`) on Linux/Unix:
+
+```bash
+SSL_CERT_FILE=ca.pem ./hitter \
+  --url "https://localhost:8443/v1/chat/completions" \
+  --client-cert client.pem \
+  --client-key client.key \
+  --rps 50 \
+  --duration 60s
+```
+
+With a client certificate configured, requests use HTTP/1.1.
 
 ## Important Notes
 

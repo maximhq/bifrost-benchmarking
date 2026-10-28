@@ -79,11 +79,16 @@ A command-line tool that fires load at one or more gateways and records latency 
 | `-path` | string | chat/completions | API path to hit (e.g. `chat/completions` or `embeddings`) |
 | `-request-type` | string | chat | `chat` or `embedding` — controls payload shape |
 | `-host` | string | localhost | Host address of the gateway servers |
+| `-scheme` | string | http | URL scheme for the gateway servers: `http` or `https` |
+| `-client-cert` | string | "" | PEM client certificate for mTLS (requires `-client-key` and `-scheme https`) |
+| `-client-key` | string | "" | PEM private key for `-client-cert` |
 | `-ramp-up` | bool | false | Gradually ramp users up (only with `-users`, requires `-ramp-up-duration`) |
 | `-ramp-up-duration` | int | 0 | Seconds to ramp from 1 to `-users` users |
 | `-debug` | bool | false | Detailed logging and periodic status updates during the run |
 
 \* Exactly one of `-rate` or `-users` must be provided.
+
+> **mTLS:** pass `-scheme https -client-cert client.pem -client-key client.key`. The gateway's certificate is verified against the system trust store; to trust a private CA, set `SSL_CERT_FILE=ca.pem` (or `SSL_CERT_DIR`) on Linux/Unix. With a client certificate configured, requests use HTTP/1.1, the same as the plain `http` path.
 
 > **Note:** omitting `-provider` benchmarks *all* providers sequentially — including `openai`, which sends real requests to `api.openai.com` using your `OPENAI_API_KEY`. Pass `-provider` explicitly unless that's what you want.
 

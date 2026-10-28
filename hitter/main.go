@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -21,6 +22,8 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
+
+	"bifrost-benchmarks/pkg/tlsconfig"
 )
 
 type ChatRequest struct {
@@ -88,6 +91,7 @@ type Config struct {
 	VirtualKey      string
 	PDFPath         string
 	Prompt          string
+	TLS             tlsconfig.Flags
 }
 
 // Prebuilt request bodies, populated once at startup when --pdf is set so the
@@ -144,6 +148,7 @@ func main() {
 	log.Printf("   Providers: %v", config.Providers)
 	log.Printf("   Stream: %v", config.Stream)
 	log.Printf("   Responses API: %v", config.ResponsesAPI)
+	log.Printf("   mTLS: %v", config.TLS.Enabled())
 	if config.Stream {
 		log.Printf("   Stream URL: %s", targetURL(config))
 	}
@@ -250,6 +255,7 @@ func parseFlags() *Config {
 	flag.StringVar(&config.VirtualKey, "virtual-key", "", "Virtual key to use for requests")
 	flag.StringVar(&config.PDFPath, "pdf", "", "Path to a PDF file to attach as a multimodal 'file' content block (enables attachment mode)")
 	flag.StringVar(&config.Prompt, "prompt", "", "Override the user prompt text (defaults to a random prompt, or a fixed summarize prompt in --pdf mode)")
+	config.TLS.Register(flag.CommandLine)
 
 	modelsFlag := flag.String("models", "gpt-4,gpt-4o,gpt-4o-mini,gpt-4.1,gpt-5", "Comma-separated list of models")
 	providersFlag := flag.String("providers", "", "Comma-separated list of providers")
@@ -279,6 +285,13 @@ func parseFlags() *Config {
 	}
 	if config.MaxConcurrency < -1 {
 		log.Fatal("Max concurrency must be -1, 0, or greater")
+	}
+	target, err := url.Parse(config.URL)
+	if err != nil {
+		log.Fatalf("Invalid URL %q: %v", config.URL, err)
+	}
+	if err := config.TLS.CheckScheme(target.Scheme); err != nil {
+		log.Fatal(err)
 	}
 	config.MaxConcurrency = resolveMaxConcurrency(config)
 	if len(config.Models) == 0 {
@@ -370,6 +383,11 @@ func configureHTTPClient(config *Config) {
 		MaxIdleConnsPerHost: poolSize,
 		IdleConnTimeout:     90 * time.Second,
 	}
+	tlsConfig, err := config.TLS.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+	transport.TLSClientConfig = tlsConfig // nil unless mTLS flags are set
 	if config.MaxConcurrency > 0 {
 		transport.MaxConnsPerHost = config.MaxConcurrency
 	}

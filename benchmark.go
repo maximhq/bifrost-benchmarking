@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
@@ -24,6 +25,7 @@ import (
 	vegeta "github.com/tsenart/vegeta/v12/lib"
 
 	"bifrost-benchmarks/pkg/concurrent"
+	"bifrost-benchmarks/pkg/tlsconfig"
 )
 
 // Provider represents an API provider to be benchmarked
@@ -86,9 +88,12 @@ func main() {
 	path := flag.String("path", "chat/completions", "API path to hit (e.g., 'chat/completions' or 'embeddings')")
 	requestType := flag.String("request-type", "chat", "Type of request: 'chat' or 'embedding'")
 	host := flag.String("host", "localhost", "Host address for the API server")
+	scheme := flag.String("scheme", "http", "URL scheme for the API server: 'http' or 'https'")
 	rampUp := flag.Bool("ramp-up", false, "Enable gradual ramp-up of users (only with --users, requires --ramp-up-duration)")
 	rampUpDuration := flag.Int("ramp-up-duration", 0, "Duration in seconds to ramp up to target users (only with --users and --ramp-up)")
 	debug := flag.Bool("debug", false, "Enable debug mode with detailed logging and periodic status updates")
+	var tlsFlags tlsconfig.Flags
+	tlsFlags.Register(flag.CommandLine)
 
 	// Parse the command line flags.
 	flag.Parse()
@@ -123,6 +128,18 @@ func main() {
 		log.Fatalf("--max-output-tokens cannot be negative")
 	}
 
+	// Validate scheme and mTLS flags
+	if *scheme != "http" && *scheme != "https" {
+		log.Fatalf("Invalid scheme '%s'. Must be 'http' or 'https'", *scheme)
+	}
+	if err := tlsFlags.CheckScheme(*scheme); err != nil {
+		log.Fatalf("%v", err)
+	}
+	tlsConfig, err := tlsFlags.Load()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	// Read prompt from file if specified
 	var filePrompt string
 	if *promptFile != "" {
@@ -135,7 +152,7 @@ func main() {
 	}
 
 	// Initialize providers
-	providers := initializeProviders(*bigPayload, *model, *maxOutputTokens, *suffix, *path, *requestType, filePrompt, *host)
+	providers := initializeProviders(*bigPayload, *model, *maxOutputTokens, *suffix, *path, *requestType, filePrompt, *scheme, *host)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -155,7 +172,7 @@ func main() {
 	}
 
 	// Run benchmarks
-	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown, *rampUp, *rampUpDuration, *debug)
+	results := runBenchmarks(providers, *rate, *users, *duration, *timeout, *cooldown, *rampUp, *rampUpDuration, *debug, tlsConfig)
 
 	// Save results
 	saveResults(results, *outputFile)
@@ -173,7 +190,7 @@ func getProviderNames(providers []Provider) []string {
 // initializeProvider creates and configures a Provider struct based on the command-line arguments.
 // It determines the payload (small or big) and marshals it into JSON bytes.
 // Placeholders #{request_index} and #{timestamp} in the payload content will be dynamically replaced.
-func initializeProviders(bigPayload bool, model string, maxOutputTokens int, suffix string, apiPath string, requestType string, filePrompt string, host string) []Provider {
+func initializeProviders(bigPayload bool, model string, maxOutputTokens int, suffix string, apiPath string, requestType string, filePrompt string, scheme string, host string) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
@@ -243,7 +260,7 @@ func initializeProviders(bigPayload bool, model string, maxOutputTokens int, suf
 		openaiPayload, _ = sonic.Marshal(chatPayload)
 	}
 
-	baseUrl := fmt.Sprintf("http://%s:%%s/%%s/", host) + apiPath
+	baseUrl := fmt.Sprintf("%s://%s:%%s/%%s/", scheme, host) + apiPath
 	openaiUrl := fmt.Sprintf("https://api.openai.com/%s", apiPath)
 
 	// Helper function to create payload template from bytes
@@ -339,7 +356,7 @@ func countInputTokens(model string, requestType string, systemPrompt string, pro
 	return len(encoding.Encode(text, nil, nil))
 }
 
-func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int, rampUp bool, rampUpDuration int, debug bool) []BenchmarkResult {
+func runBenchmarks(providers []Provider, rate int, users int, duration int, timeout int, cooldown int, rampUp bool, rampUpDuration int, debug bool, tlsConfig *tls.Config) []BenchmarkResult {
 	results := make([]BenchmarkResult, 0, len(providers))
 
 	for i, provider := range providers {
@@ -350,7 +367,7 @@ func runBenchmarks(providers []Provider, rate int, users int, duration int, time
 			MaxIdleConnsPerHost: 100000,
 			MaxConnsPerHost:     0,
 			IdleConnTimeout:     10 * time.Second,
-			// Optionally tune TLS and other settings if needed
+			TLSClientConfig:     tlsConfig, // nil unless mTLS flags are set
 		}
 
 		httpClient := &http.Client{
