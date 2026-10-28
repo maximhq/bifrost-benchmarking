@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -613,17 +614,14 @@ func monitorServerMemory(p *process.Process, stop <-chan struct{}, stats *[]Serv
 func createTargeter(provider Provider) vegeta.Targeter {
 	// Create a counter for round-robin message selection
 	var requestCounter int64
-	var counterMutex sync.Mutex
 
 	return func(tgt *vegeta.Target) error {
 		// Get next message index in round-robin fashion
-		counterMutex.Lock()
-		requestCounter++
-		counterMutex.Unlock()
+		requestIndex := atomic.AddInt64(&requestCounter, 1)
 
 		// Use string templating for efficient payload generation
 		// Replace placeholders directly in the template string
-		updatedPayload := strings.ReplaceAll(provider.PayloadTemplate, "#{request_index}", fmt.Sprintf("%d", requestCounter))
+		updatedPayload := strings.ReplaceAll(provider.PayloadTemplate, "#{request_index}", fmt.Sprintf("%d", requestIndex))
 		updatedPayload = strings.ReplaceAll(updatedPayload, "#{timestamp}", time.Now().Format(time.RFC3339))
 
 		// Set up the Vegeta target properties.
@@ -661,16 +659,13 @@ func createTargeter(provider Provider) vegeta.Targeter {
 // It returns a closure that generates HTTP requests with dynamically updated payloads.
 func createConcurrentTargeter(provider Provider) func() (concurrent.Request, error) {
 	var requestCounter int64
-	var counterMutex sync.Mutex
 
 	return func() (concurrent.Request, error) {
 		// Get next message index
-		counterMutex.Lock()
-		requestCounter++
-		counterMutex.Unlock()
+		requestIndex := atomic.AddInt64(&requestCounter, 1)
 
 		// Use string templating for efficient payload generation
-		updatedPayload := strings.ReplaceAll(provider.PayloadTemplate, "#{request_index}", fmt.Sprintf("%d", requestCounter))
+		updatedPayload := strings.ReplaceAll(provider.PayloadTemplate, "#{request_index}", fmt.Sprintf("%d", requestIndex))
 		updatedPayload = strings.ReplaceAll(updatedPayload, "#{timestamp}", time.Now().Format(time.RFC3339))
 
 		// Build headers
