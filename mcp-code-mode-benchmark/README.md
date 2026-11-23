@@ -7,6 +7,8 @@ Three benchmark rounds:
 - **Round 2**: 251 tools across 11 MCP servers, 65 queries
 - **Round 3**: 508 tools across 16 MCP servers, 65 queries
 
+Separately, the [code mode discovery benchmark](discovery-benchmark/README.md) checks whether a model, asked to use an MCP server by name, finds and uses it through code mode without being told how (3 MCP servers, 7 models).
+
 ## What is Code Mode?
 
 When you connect multiple MCP servers to an LLM, every request includes the full schema for every tool. With 100+ tools, this means tens of thousands of tokens are spent just describing tools — before the model even starts working.
@@ -207,6 +209,8 @@ All paths and URLs are configurable via environment variables:
 | `BIFROST_API_KEY` | `dummy-key` | API key (or Bifrost virtual key) |
 | `BENCH_WORKSPACE` | Script directory | Working directory for file operations |
 | `BENCH_SQLITE_DB` | `../mcp-bifrost-sqlite/sqlite.db` | Path to SQLite database used by MCP |
+| `BIFROST_SETUP_TOKEN` | — | Sent as `X-Bifrost-Setup-Token` by `fetch-logs` while no Bifrost admin account exists |
+| `BIFROST_ADMIN_USER` / `BIFROST_ADMIN_PASSWORD` | — | Basic auth for `fetch-logs` once dashboard auth is on (takes precedence over the setup token) |
 
 Example:
 
@@ -214,6 +218,10 @@ Example:
 export BIFROST_BASE_URL="http://localhost:8080/openai"
 export BENCH_SQLITE_DB="/path/to/your/sqlite.db"
 ```
+
+### Keys
+
+The benchmark never reads or stores provider or MCP keys. It sends requests to your Bifrost, and Bifrost calls the providers and MCP servers with the keys configured in it (UI, or `config.json` with `"value": "env.ANTHROPIC_API_KEY"`). The shell only needs the variables in the table above, all of which point at Bifrost.
 
 ## MCP Servers
 
@@ -324,7 +332,24 @@ python benchmark.py summary --name r2_cm_off_sonnet4_6
 python benchmark.py fetch-logs --name r2_cm_off_sonnet4_6
 ```
 
-Fetches full agent loop conversation logs from Bifrost's API and saves per-query JSON files to `runs/<name>/logs/`.
+Fetches full agent loop conversation logs from Bifrost's API and saves per-query JSON files to `runs/<name>/logs/`. `run` does this on its own when it finishes. It needs Bifrost's logs store enabled, and the setup token or admin credentials above. Bifrost writes logs in batches, so a fetch made right after the last query can miss it: run `fetch-logs` again. A `--queries` re-run resets the run's time window to the re-run, so fetch logs before re-running.
+
+### OK vs Discovered
+
+`run` marks a query "OK" when Bifrost answers with HTTP 200: the request went through, not that the task was done. The Pass Rate figures in the results above are this number. Once logs are fetched, `summary` also prints a DISCOVERED table, read from the agent loop in each query's log, showing whether each query reached its expected servers through code mode; its columns and scoring rules are described in the [code mode discovery benchmark](discovery-benchmark/README.md#how-a-query-is-scored).
+
+### Several models
+
+`--model` takes several values. Each model runs into `runs/<name>/<model>/`, and `summary --name <name>` (also printed at the end of the run) compares them on the same queries. With `--parallel`, each model runs in its own process at the same time and writes its live output to `runs/<name>/<model>/run.log`; when all finish, the logs are fetched once more:
+
+```bash
+python benchmark.py run --name r3_models --eval-file eval_tasks/eval_tasks_r3.json --parallel \
+  --model anthropic/claude-sonnet-4-6 anthropic/claude-opus-4-6 openai/gpt-5.4
+python benchmark.py summary --name r3_models                   # one row per model
+python benchmark.py summary --name r3_models/claude-sonnet-4-6 # one run in full
+```
+
+Every request is sent with `reasoning_effort: medium`, which Bifrost maps to each provider's own setting; Bifrost drops it for models without reasoning (for example `openai/gpt-4o`), so those run at their default. `fetch-logs --name r3_models` re-fetches every run's logs.
 
 ## Supported Models
 
@@ -367,6 +392,10 @@ Round 2 covers 11 servers: Apollo, FileSystem, Firecrawl, GitHub, Google Sheets,
 
 Round 3 adds 5 new servers: Google Calendar, Google Drive, Google Docs, Calendly, Figma.
 
+### Code mode discovery (`discovery-benchmark/eval_tasks.json`)
+
+8 queries on Notion, Tavily and Firecrawl that check whether a model finds and uses a server reachable only through code mode. The setup, queries, scoring and results are in [discovery/README.md](discovery-benchmark/README.md).
+
 Each query specifies:
 
 ```json
@@ -388,6 +417,11 @@ Each query specifies:
 ├── benchmark.py          # Benchmark runner (run, cleanup, summary, fetch-logs)
 ├── benchmark_report.md   # Full comparison results across all rounds
 ├── mcp_catalog.png       # Screenshot of Bifrost MCP server catalog
+├── discovery-benchmark/  # Code mode discovery benchmark (its own README, queries and results)
+│   ├── README.md
+│   ├── eval_tasks.json   # 8 queries on Notion, Tavily and Firecrawl
+│   ├── mcp_servers.png   # The three MCP servers in code mode
+│   └── models.png        # The seven models
 ├── eval_tasks/           # Benchmark query sets by round
 │   ├── eval_tasks.json   # Round 1: 64 eval query definitions (96 tools)
 │   ├── eval_tasks_r2.json # Round 2: 65 eval queries (251 tools)

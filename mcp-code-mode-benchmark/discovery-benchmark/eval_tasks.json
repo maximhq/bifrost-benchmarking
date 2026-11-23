@@ -1,0 +1,76 @@
+[
+  {
+    "id": "DS1",
+    "difficulty": "simple",
+    "query": "Use Tavily to find the latest news headlines about AI gateways this week.",
+    "expected_servers": ["tavily"],
+    "expected_tools": ["tavily_search"],
+    "success_criteria": "Searches with Tavily and returns recent headlines",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS2",
+    "difficulty": "simple",
+    "query": "List a few page titles from our Notion workspace.",
+    "expected_servers": ["notion"],
+    "expected_tools": ["API-post-search"],
+    "success_criteria": "Lists page titles from the Notion workspace",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS3",
+    "difficulty": "simple",
+    "query": "Use Firecrawl to get the main content of https://docs.getbifrost.ai/overview and summarise it in three bullets.",
+    "expected_servers": ["firecrawl"],
+    "expected_tools": ["firecrawl_scrape"],
+    "success_criteria": "Scrapes the page with Firecrawl and summarises it",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS4",
+    "difficulty": "simple",
+    "query": "Search our Notion workspace for anything about onboarding new engineers.",
+    "expected_servers": ["notion"],
+    "expected_tools": ["API-post-search"],
+    "success_criteria": "Searches the Notion workspace (finding nothing is a valid answer)",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS5",
+    "difficulty": "simple",
+    "query": "Use Firecrawl to list the pages on docs.getbifrost.ai.",
+    "expected_servers": ["firecrawl"],
+    "expected_tools": ["firecrawl_map"],
+    "success_criteria": "Maps the site with Firecrawl",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS6",
+    "difficulty": "simple",
+    "query": "Use Tavily to find the latest version of the Model Context Protocol specification.",
+    "expected_servers": ["tavily"],
+    "expected_tools": ["tavily_search"],
+    "success_criteria": "Returns the spec version found by a Tavily search",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS7",
+    "difficulty": "medium",
+    "query": "Use Tavily to find the latest Model Context Protocol specification version, then check our Notion workspace for any page that mentions MCP.",
+    "expected_servers": ["tavily", "notion"],
+    "expected_tools": ["tavily_search", "API-post-search"],
+    "success_criteria": "Uses Tavily for the spec version and Notion for the workspace check",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  },
+  {
+    "id": "DS8",
+    "difficulty": "simple",
+    "query": "Show me the titles of a few pages in our Notion workspace.",
+    "expected_servers": [],
+    "expected_tools": [],
+    "virtual_key_env": "BENCH_VK_WITHOUT_NOTION",
+    "unavailable_server": "notion",
+    "success_criteria": "Under a key that cannot reach Notion, does not try to use Notion, and answers",
+    "side_effects": {"files": [], "directories": [], "sqlite_tables": []}
+  }
+]

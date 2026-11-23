@@ -27,10 +27,13 @@ Before each run:
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
+import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import requests
@@ -40,6 +43,11 @@ import requests
 BIFROST_BASE_URL = os.environ.get("BIFROST_BASE_URL", "http://localhost:8080/openai")
 BIFROST_COMPLETIONS_URL = f"{BIFROST_BASE_URL}/v1/chat/completions"
 API_KEY = os.environ.get("BIFROST_API_KEY", "dummy-key")
+# fetch-logs reads Bifrost's management API (/api/logs), which needs the setup token before an
+# admin account exists, and the admin's credentials (Basic auth) once dashboard auth is on.
+SETUP_TOKEN = os.environ.get("BIFROST_SETUP_TOKEN")
+ADMIN_USER = os.environ.get("BIFROST_ADMIN_USER")
+ADMIN_PASSWORD = os.environ.get("BIFROST_ADMIN_PASSWORD")
 
 WORKSPACE = os.environ.get("BENCH_WORKSPACE", os.path.dirname(os.path.abspath(__file__)))
 SQLITE_DB = os.environ.get("BENCH_SQLITE_DB", os.path.join(os.path.dirname(WORKSPACE), "mcp-bifrost-sqlite", "sqlite.db"))
@@ -55,6 +63,31 @@ SYSTEM_MESSAGE = (
     "Use the available tools to fulfill the user's request completely. "
     "Be concise in your responses — focus on results, not process narration."
 )
+
+# Names no server, so a run measures what the gateway itself tells the model about its tools.
+# The default above lists every server by hand, which hides whether the model could find them.
+NEUTRAL_SYSTEM_MESSAGE = (
+    "You are a helpful AI agent. "
+    "Use the available tools to fulfill the user's request completely. "
+    "Be concise in your responses — focus on results, not process narration."
+)
+SYSTEM_MESSAGES = {"default": SYSTEM_MESSAGE, "neutral": NEUTRAL_SYSTEM_MESSAGE}
+
+# Sent on every request; Bifrost maps it to each provider's reasoning setting (and drops it for
+# models without reasoning).
+REASONING_EFFORT = "medium"
+
+CODE_MODE_DISCOVERY_TOOLS = ("listToolFiles", "readToolFile", "getToolDocs")
+CODE_MODE_EXECUTE_TOOL = "executeToolCode"
+# The line Bifrost adds to the system message naming the code mode servers the caller can reach:
+# "MCP servers available through code mode: a, b. Each one is a server: ..." (and the earlier
+# "MCP servers available through code mode (start with listToolFiles to use them): a, b.").
+CODE_MODE_POINTER = re.compile(r"MCP servers available through code mode(?: \(start with listToolFiles to use them\))?: ([^\n]*?)\.(?: |$)", re.MULTILINE)
+# What Bifrost answers a tool call with when the tool is not served to the caller (core/mcp/exec.go).
+NOT_PERMITTED_TOOL_ERROR = "not permitted"
+# What executeToolCode reports for a name the sandbox does not bind, e.g. a server the caller cannot
+# reach, or one spelled in the wrong case (modules are named exactly as the Bifrost client).
+UNDEFINED_NAME_ERROR = re.compile(r"undefined: (\w+)")
 
 # Files that belong to the base workspace (never deleted by cleanup)
 BASE_FILES = {
@@ -363,25 +396,26 @@ def print_difficulty_breakdown(results):
 # ─── Run a single query ─────────────────────────────────────────────────────
 
 
-def run_query(query, model):
+def run_query(query, model, system_message=SYSTEM_MESSAGE, virtual_key=None):
     """Send a single query to Bifrost and capture all metrics."""
     start_time = time.time()
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    }
+    if virtual_key:
+        headers["x-bf-vk"] = virtual_key
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": query},
+        ],
+        "reasoning_effort": REASONING_EFFORT,
+    }
 
     try:
-        resp = requests.post(
-            BIFROST_COMPLETIONS_URL,
-            headers={
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_MESSAGE},
-                    {"role": "user", "content": query},
-                ],
-            },
-        )
+        resp = requests.post(BIFROST_COMPLETIONS_URL, headers=headers, json=body)
         elapsed = time.time() - start_time
         data = resp.json()
     except requests.exceptions.ConnectionError:
@@ -457,7 +491,7 @@ def run_query(query, model):
 # ─── Run benchmark ───────────────────────────────────────────────────────────
 
 
-def run_benchmark(name, model, difficulty_filter=None, start_from=None, query_ids=None):
+def run_benchmark(name, model, difficulty_filter=None, start_from=None, query_ids=None, system_message="default"):
     """Run all (or filtered) eval tasks and save results."""
 
     # Load tasks
@@ -514,6 +548,8 @@ def run_benchmark(name, model, difficulty_filter=None, start_from=None, query_id
         "started_at": datetime.now(timezone.utc).isoformat(),
         "difficulty_filter": difficulty_filter,
         "start_from": start_from,
+        "system_message": system_message,
+        "reasoning_effort": REASONING_EFFORT,
         "total_tasks": len(tasks),
     }
     with open(os.path.join(run_dir, "config.json"), "w") as f:
@@ -523,7 +559,7 @@ def run_benchmark(name, model, difficulty_filter=None, start_from=None, query_id
 
     print(f"\n{'='*70}")
     print(f"  Benchmark Run: {name}")
-    print(f"  Model: {model}")
+    print(f"  Model: {model}  |  Reasoning effort: {REASONING_EFFORT}")
     print(f"  Tasks: {len(tasks)}")
     print(f"  Started: {config['started_at']}")
     print(f"{'='*70}\n")
@@ -545,11 +581,19 @@ def run_benchmark(name, model, difficulty_filter=None, start_from=None, query_id
         print(f"\r  Running {task['id']}...", end="", flush=True)
         print(f"\r{' '*40}\r", end="", flush=True)
 
-        result = run_query(task["query"], model)
+        # A task can run under its own virtual key (e.g. one that cannot reach a server). Without
+        # it the task would silently run with full access, so a missing key fails the task.
+        vk_env = task.get("virtual_key_env")
+        if vk_env and not os.environ.get(vk_env):
+            result = {"status": "error", "error": f"{vk_env} is not set; this task runs under that virtual key", "wall_clock_seconds": 0}
+        else:
+            result = run_query(task["query"], model, SYSTEM_MESSAGES[system_message], os.environ.get(vk_env) if vk_env else None)
         result["query_id"] = task["id"]
         result["difficulty"] = task["difficulty"]
         result["query"] = task["query"]
         result["expected_servers"] = task["expected_servers"]
+        if task.get("unavailable_server"):
+            result["unavailable_server"] = task["unavailable_server"]
         result["expected_tools"] = task["expected_tools"]
         result["success_criteria"] = task["success_criteria"]
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
@@ -606,8 +650,49 @@ def run_benchmark(name, model, difficulty_filter=None, start_from=None, query_id
 # ─── Summary ─────────────────────────────────────────────────────────────────
 
 
+def matrix_runs(name):
+    """The per-model runs a multi-model `run` wrote under runs/<name>/, or [] for a single run."""
+    run_dir = os.path.join(RUNS_DIR, name)
+    if os.path.exists(os.path.join(run_dir, "results.json")) or not os.path.isdir(run_dir):
+        return []
+    return sorted(
+        f"{name}/{entry}" for entry in os.listdir(run_dir)
+        if os.path.exists(os.path.join(run_dir, entry, "results.json"))
+    )
+
+
+def print_matrix_summary(name, runs):
+    """Print one row per model run, so models can be compared on the same queries."""
+    print(f"\n  Run: {name}  |  {len(runs)} model runs\n")
+    print(f"┌{'─'*34}┬{'─'*9}┬{'─'*12}┬{'─'*11}┬{'─'*10}┬{'─'*11}┬{'─'*11}┐")
+    print(f"│ {'Model':<32} │ {'OK':>7} │ {'Discovered':>10} │ {'Avg turns':>9} │ {'Errors':>8} │ {'Tokens':>9} │ {'Cost':>9} │")
+    print(f"├{'─'*34}┼{'─'*9}┼{'─'*12}┼{'─'*11}┼{'─'*10}┼{'─'*11}┼{'─'*11}┤")
+    for run in runs:
+        run_dir = os.path.join(RUNS_DIR, run)
+        with open(os.path.join(run_dir, "results.json")) as f:
+            results = json.load(f)
+        rows = score_rows(run_dir, results)
+        scored = [row for row in rows if row["scored"]]
+        ok = f"{sum(1 for r in results if r['status'] == 'success')}/{len(results)}"
+        discovered = f"{sum(1 for row in scored if row['discovered'])}/{len(scored)}" if scored else "-"
+        turns = f"{sum(row['turns'] for row in scored) / len(scored):.1f}" if scored else "-"
+        errors = str(sum(1 for row in scored if row["unavailable_errors"])) if scored else "-"
+        tokens = _fmt_tokens(sum(r.get("total_tokens", 0) or 0 for r in results))
+        cost = _fmt_cost(sum(r.get("total_cost", 0) or 0 for r in results))
+        label = run.split("/", 1)[1]
+        if len(label) > 32:
+            label = label[:31] + "…"
+        print(f"│ {label:<32} │ {ok:>7} │ {discovered:>10} │ {turns:>9} │ {errors:>8} │ {tokens:>9} │ {cost:>9} │")
+    print(f"└{'─'*34}┴{'─'*9}┴{'─'*12}┴{'─'*11}┴{'─'*10}┴{'─'*11}┴{'─'*11}┘")
+    print(f"  Discovered and Errors need fetched logs ('-' = none yet). Per run: python benchmark.py summary --name {runs[0]}")
+
+
 def print_summary(name):
     """Print a summary table for a completed run."""
+    runs = matrix_runs(name)
+    if runs:
+        print_matrix_summary(name, runs)
+        return
     run_dir = os.path.join(RUNS_DIR, name)
     results_file = os.path.join(run_dir, "results.json")
     config_file = os.path.join(run_dir, "config.json")
@@ -637,12 +722,20 @@ def print_summary(name):
     # Difficulty breakdown
     print_difficulty_breakdown(results)
 
+    # Whether each query found its servers through code mode (needs fetch-logs)
+    print_discovered_breakdown(run_dir, results)
+
 
 # ─── Fetch logs ─────────────────────────────────────────────────────────────
 
 
 def fetch_logs(name):
     """Fetch full session logs from Bifrost API for a completed run."""
+    runs = matrix_runs(name)
+    if runs:
+        for run in runs:
+            fetch_logs(run)
+        return
     run_dir = os.path.join(RUNS_DIR, name)
     results_file = os.path.join(run_dir, "results.json")
     config_file = os.path.join(run_dir, "config.json")
@@ -678,13 +771,19 @@ def fetch_logs(name):
     if model:
         base_params["models"] = model
 
+    management_auth = {}
+    if ADMIN_USER and ADMIN_PASSWORD:
+        management_auth["auth"] = (ADMIN_USER, ADMIN_PASSWORD)
+    elif SETUP_TOKEN:
+        management_auth["headers"] = {"X-Bifrost-Setup-Token": SETUP_TOKEN}
+
     print(f"Fetching logs for run '{name}' ({started} → {completed})...")
 
     all_logs = []
     offset = 0
     while True:
         params = {**base_params, "offset": offset}
-        resp = requests.get(f"{BIFROST_BASE_URL.replace('/openai', '')}/api/logs", params=params)
+        resp = requests.get(f"{BIFROST_BASE_URL.replace('/openai', '')}/api/logs", params=params, **management_auth)
         if resp.status_code != 200:
             print(f"Error fetching logs: {resp.status_code} {resp.text[:200]}")
             sys.exit(1)
@@ -711,7 +810,7 @@ def fetch_logs(name):
 
         # Fetch full log with complete input_history
         try:
-            detail_resp = requests.get(f"{logs_base}/api/logs/{log_id}")
+            detail_resp = requests.get(f"{logs_base}/api/logs/{log_id}", **management_auth)
             if detail_resp.status_code != 200:
                 continue
             full_log = detail_resp.json()
@@ -776,6 +875,268 @@ def fetch_logs(name):
     print(f"  Logs saved to: {logs_dir}/")
 
 
+# ─── Discovered ──────────────────────────────────────────────────────────────
+#
+# A run's "success" only means the request returned 200: a model that answers "I can't reach
+# Linear" without trying passes it. summary also reads the agent loop from the fetched logs and
+# asks the question code mode discovery is about: did the model find the server it needed through
+# code mode, without being told it was there?
+#   discovered - every expected server was found through code mode: its file was read
+#                (readToolFile / getToolDocs on servers/<name>...) or executeToolCode called it.
+#                What happens after that does not count against the model: a tool that fails on a
+#                bad key, an auth error or a provider error still means the server was found. A
+#                task that expects no server (a control, a service that is not connected, or a
+#                server the key cannot reach) is discovered when no server was used in its place
+#                and the model answered.
+#   infra      - the request failed before the model did anything (an upstream timeout, a gateway
+#                error); there is nothing to score, so it is left out rather than passed or failed.
+#   errors     - the "server is not connected" failures: a tool name Bifrost does not serve, such as
+#                ListToolFiles for listToolFiles or the server name called as a tool (left
+#                unexecuted on the response), a call answered "not permitted", or code naming an
+#                expected server the sandbox does not bind ("undefined: linear" when the client is
+#                Linear). Shown for diagnosis; they fail a task only when the server was never found.
+#   turns      - model calls in the agent loop; the intended flow (listToolFiles, readToolFile,
+#                executeToolCode, answer) takes 3-4.
+#   discovery  - listToolFiles / readToolFile / getToolDocs calls before the first executeToolCode.
+#   no tool    - the model called no tool at all.
+# A server counts as called when executeToolCode code calls one of its tools (code mode binds each
+# server as a module, `linear.get_teams()`), or when a tool named "<server>-<tool>" is called
+# directly (code mode off). Server names are compared case-insensitively.
+
+
+def _message_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(part.get("text") or "" for part in content if isinstance(part, dict))
+    return ""
+
+
+def _tool_calls(log):
+    """Every tool call in the agent loop, in order, as (name, arguments) pairs."""
+    messages = list(log.get("input_history") or [])
+    if log.get("output_message"):
+        messages.append(log["output_message"])
+    calls = []
+    for message in messages:
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            calls.append((function.get("name") or "", function.get("arguments") or ""))
+    return calls
+
+
+def _executed_code(arguments):
+    if isinstance(arguments, dict):
+        return str(arguments.get("code") or "")
+    try:
+        return str(json.loads(arguments).get("code") or "")
+    except (ValueError, AttributeError):
+        return str(arguments)
+
+
+def _servers_called(calls, servers):
+    called = set()
+    for name, arguments in calls:
+        if name == CODE_MODE_EXECUTE_TOOL:
+            code = _executed_code(arguments)
+            for server in servers:
+                if re.search(r"\b" + re.escape(server) + r"\s*\.\s*\w+\s*\(", code, re.IGNORECASE):
+                    called.add(server)
+        elif name not in CODE_MODE_DISCOVERY_TOOLS:
+            for server in servers:
+                if re.match(re.escape(server) + r"[-_]", name, re.IGNORECASE):
+                    called.add(server)
+    return called
+
+
+def _servers_found(calls, servers):
+    """Servers the model found through code mode: called from code, or their file read."""
+    found = _servers_called(calls, servers)
+    for name, arguments in calls:
+        if name in ("readToolFile", "getToolDocs"):
+            text = arguments if isinstance(arguments, str) else json.dumps(arguments)
+            for server in servers:
+                if re.search(r"servers/" + re.escape(server) + r"(\.pyi|/|\b)", text, re.IGNORECASE):
+                    found.add(server)
+    return found
+
+
+def _offered_servers(history):
+    """The code mode servers the gateway offered: the pointer line Bifrost adds to the system
+    message, and any servers/<name>.pyi file the model read."""
+    names = set()
+    for message in history:
+        text = _message_text(message.get("content"))
+        if message.get("role") == "system":
+            for listed in CODE_MODE_POINTER.findall(text):
+                names.update(n.strip() for n in re.split(r",| and \d+ more", listed) if n.strip())
+        names.update(re.findall(r"servers/(\w+)\.pyi", text))
+    return names
+
+
+def score_task(result, log):
+    """Score one task from its result row and its fetched log (None when no log matched)."""
+    row = {
+        "query_id": result["query_id"],
+        "completed": result.get("status") == "success",
+        "scored": log is not None,
+        "infra": False,
+        "discovered": False,
+        "turns": None,
+        "discovery_calls": None,
+        "tool_calls": None,
+        "unavailable_errors": None,
+        "missing_servers": [],
+    }
+    if log is None:
+        return row
+    calls = _tool_calls(log)
+    history = log.get("input_history") or []
+    # The answer is what the client got back; the log's final message stands in only when it is missing.
+    answer = result.get("response")
+    if answer is None:
+        answer = _message_text((log.get("output_message") or {}).get("content"))
+    expected = result.get("expected_servers") or []
+
+    row["turns"] = sum(1 for m in history if m.get("role") == "assistant") + (1 if log.get("output_message") else 0)
+    # A tool name Bifrost does not serve (ListToolFiles for listToolFiles) is never run: the agent
+    # loop stops and hands the call back, so it shows up as a pending call on the response.
+    errors = len(result.get("pending_tool_calls") or [])
+    expected_names = {server.lower() for server in expected}
+    for message in history:
+        if message.get("role") != "tool":
+            continue
+        text = _message_text(message.get("content"))
+        if NOT_PERMITTED_TOOL_ERROR in text.lower():
+            errors += 1
+        elif any(name.lower() in expected_names for name in UNDEFINED_NAME_ERROR.findall(text)):
+            errors += 1
+    row["unavailable_errors"] = errors
+
+    first_execute = next((i for i, (name, _) in enumerate(calls) if name == CODE_MODE_EXECUTE_TOOL), len(calls))
+    row["discovery_calls"] = sum(1 for name, _ in calls[:first_execute] if name in CODE_MODE_DISCOVERY_TOOLS)
+    row["tool_calls"] = len(calls)
+
+    # The request failed before the model acted: nothing to judge.
+    if not row["completed"] and not calls and not result.get("pending_tool_calls"):
+        row["scored"] = False
+        row["infra"] = True
+        return row
+
+    if expected:
+        found = _servers_found(calls, expected)
+        row["missing_servers"] = [server for server in expected if server not in found]
+        row["discovered"] = not row["missing_servers"]
+    elif result.get("unavailable_server"):
+        # A service that is not connected (or that the key cannot reach): the model must know it is
+        # not there, so it passes when it never tries to use it and answers. Looking for related
+        # information in a server that is connected (a runbook in the team wiki) is fine.
+        missing = result["unavailable_server"].lower()
+        named = [n for n, _ in calls] + [p.get("name") or "" for p in result.get("pending_tool_calls") or []]
+        tried = any(missing in n.lower() for n in named if n not in CODE_MODE_DISCOVERY_TOOLS + (CODE_MODE_EXECUTE_TOOL,))
+        tried = tried or bool(_servers_found(calls, [missing]))
+        tried = tried or any(
+            missing in (n.lower() for n in UNDEFINED_NAME_ERROR.findall(_message_text(m.get("content"))))
+            for m in history if m.get("role") == "tool"
+        )
+        row["discovered"] = not tried and bool((answer or "").strip())
+    else:
+        # No server should be used at all (a control). executeToolCode on its own is not a server
+        # call (a model may do arithmetic in the sandbox); it counts only when its code calls a server
+        # the gateway offered, and any other tool the model calls directly is a server tool.
+        direct = any(name != CODE_MODE_EXECUTE_TOOL and name not in CODE_MODE_DISCOVERY_TOOLS for name, _ in calls)
+        used = direct or _servers_called(calls, _offered_servers(history))
+        row["discovered"] = not used and bool((answer or "").strip())
+    return row
+
+
+def score_rows(run_dir, results):
+    """Score every query of a run from runs/<run>/logs/."""
+    rows = []
+    for result in results:
+        log_file = os.path.join(run_dir, "logs", f"{result['query_id']}.json")
+        log = None
+        if os.path.exists(log_file):
+            with open(log_file) as f:
+                log = json.load(f)
+        rows.append(score_task(result, log))
+    return rows
+
+
+def print_discovered_breakdown(run_dir, results):
+    """Print, from the fetched logs, whether each query found its servers through code mode."""
+    rows = score_rows(run_dir, results)
+    scored = [row for row in rows if row["scored"]]
+    if not scored:
+        print("\n  No fetched logs: run fetch-logs to see which queries found their servers.")
+        return
+
+    def dash(value):
+        return "-" if value is None else str(value)
+
+    print(f"\n┌{'─'*84}┐")
+    print(f"│ {'DISCOVERED (from fetched logs)':^82} │")
+    print(f"├{'─'*8}┬{'─'*10}┬{'─'*7}┬{'─'*11}┬{'─'*12}┬{'─'*8}┬{'─'*22}┤")
+    print(f"│ {'ID':<6} │ {'Found':<8} │ {'Turns':>5} │ {'Discovery':>9} │ {'Tool calls':>10} │ {'Errors':>6} │ {'Missing servers':<20} │")
+    print(f"├{'─'*8}┼{'─'*10}┼{'─'*7}┼{'─'*11}┼{'─'*12}┼{'─'*8}┼{'─'*22}┤")
+    for row in rows:
+        reached = "infra" if row["infra"] else ("-" if not row["scored"] else ("yes" if row["discovered"] else "no"))
+        missing = ", ".join(row["missing_servers"])
+        if len(missing) > 20:
+            missing = missing[:19] + "…"
+        print(
+            f"│ {row['query_id']:<6} │ {reached:<8} │ {dash(row['turns']):>5} │ {dash(row['discovery_calls']):>9} │ "
+            f"{dash(row['tool_calls']):>10} │ {dash(row['unavailable_errors']):>6} │ {missing:<20} │"
+        )
+    reached_str = f"{sum(1 for row in scored if row['discovered'])}/{len(scored)}"
+    avg_turns = f"{sum(row['turns'] for row in scored) / len(scored):.1f}"
+    avg_discovery = f"{sum(row['discovery_calls'] for row in scored) / len(scored):.1f} avg"
+    no_tool = f"{sum(1 for row in scored if row['tool_calls'] == 0)} none"
+    errors = str(sum(1 for row in scored if row["unavailable_errors"]))
+    print(f"├{'─'*8}┼{'─'*10}┼{'─'*7}┼{'─'*11}┼{'─'*12}┼{'─'*8}┼{'─'*22}┤")
+    print(f"│ {'TOTAL':<6} │ {reached_str:<8} │ {avg_turns:>5} │ {avg_discovery:>9} │ {no_tool:>10} │ {errors:>6} │ {'':<20} │")
+    print(f"└{'─'*8}┴{'─'*10}┴{'─'*7}┴{'─'*11}┴{'─'*12}┴{'─'*8}┴{'─'*22}┘")
+    print("  Errors: calls that failed as unavailable (tool name Bifrost does not serve, 'not permitted', or an undefined server).")
+
+    infra = [row["query_id"] for row in rows if row["infra"]]
+    if infra:
+        print(f"  Left out, the request failed before the model acted (timeout or gateway error): {', '.join(infra)}")
+    unscored = [row["query_id"] for row in rows if not row["scored"] and not row["infra"]]
+    if unscored:
+        print(f"  Unscored (no log matched, run fetch-logs again): {', '.join(unscored)}")
+
+
+# ─── Parallel runs ───────────────────────────────────────────────────────────
+
+
+def run_parallel(args, combos):
+    """Run each model in its own process, all models at once. Each run's live output goes to
+    runs/<run>/run.log."""
+    by_model = {}
+    for model, name in combos:
+        by_model.setdefault(model, []).append(name)
+
+    def run_model(model):
+        for name in by_model[model]:
+            log_path = os.path.join(RUNS_DIR, name, "run.log")
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            cmd = [sys.executable, os.path.abspath(__file__), "run", "--name", name, "--model", model,
+                   "--eval-file", EVAL_TASKS_FILE, "--system-message", args.system_message]
+            if args.difficulty:
+                cmd += ["--difficulty", args.difficulty]
+            if args.start_from:
+                cmd += ["--start-from", args.start_from]
+            if args.queries:
+                cmd += ["--queries", *args.queries]
+            with open(log_path, "w") as out:
+                code = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT).returncode
+            print(f"  {name}: {'finished' if code == 0 else f'failed (exit {code})'}, log: {log_path}", flush=True)
+
+    print(f"\n  Running {len(by_model)} models in parallel ({len(combos)} runs)...\n", flush=True)
+    with ThreadPoolExecutor(max_workers=len(by_model)) as pool:
+        list(pool.map(run_model, by_model))
+
+
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
 
@@ -790,6 +1151,7 @@ Examples:
   python benchmark.py run --name cm_on_opus_r1 --model anthropic/claude-opus-4-6 --difficulty simple
   python benchmark.py run --name cm_off_gpt_r1 --model openai/gpt-5.4 --eval-file eval_tasks/eval_tasks_r3.json --start-from H1
   python benchmark.py summary --name cm_off_sonnet_r1
+  python benchmark.py run --name disc --model anthropic/claude-sonnet-4-6 openai/gpt-5.4 --parallel --eval-file eval_tasks/eval_tasks_discovery.json --system-message neutral
         """,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -808,7 +1170,8 @@ Examples:
     run_parser.add_argument(
         "--model",
         required=True,
-        help="Model in provider/model format (e.g. anthropic/claude-sonnet-4-6)",
+        nargs="+",
+        help="Model(s) in provider/model format (e.g. anthropic/claude-sonnet-4-6); several run one after another",
     )
     run_parser.add_argument(
         "--difficulty",
@@ -828,6 +1191,17 @@ Examples:
         "--eval-file",
         default=DEFAULT_EVAL_FILE,
         help=f"Eval tasks file (default: {DEFAULT_EVAL_FILE})",
+    )
+    run_parser.add_argument(
+        "--system-message",
+        choices=sorted(SYSTEM_MESSAGES),
+        default="default",
+        help="default lists every server (R1-R3); neutral names none, for discoverability runs",
+    )
+    run_parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Run each --model at the same time, one process per model",
     )
 
     # summary
@@ -854,7 +1228,21 @@ Examples:
     if args.command == "cleanup":
         cleanup()
     elif args.command == "run":
-        run_benchmark(args.name, args.model, args.difficulty, args.start_from, args.queries)
+        combos = []
+        for model in args.model:
+            # One model keeps the plain run layout; several get runs/<name>/<model>.
+            name = args.name if len(args.model) == 1 else f"{args.name}/{model.split('/')[-1]}"
+            combos.append((model, name))
+        if args.parallel and len(args.model) > 1:
+            run_parallel(args, combos)
+            # Each run fetched its logs as it finished, possibly before Bifrost flushed the last ones.
+            time.sleep(10)
+            fetch_logs(args.name)
+        else:
+            for model, name in combos:
+                run_benchmark(name, model, args.difficulty, args.start_from, args.queries, args.system_message)
+        if len(combos) > 1:
+            print_matrix_summary(args.name, matrix_runs(args.name))
     elif args.command == "summary":
         print_summary(args.name)
     elif args.command == "fetch-logs":
