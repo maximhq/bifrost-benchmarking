@@ -7,6 +7,8 @@ Three benchmark rounds:
 - **Round 2**: 251 tools across 11 MCP servers, 65 queries
 - **Round 3**: 508 tools across 16 MCP servers, 65 queries
 
+Separately, the [code mode discovery benchmark](discovery-benchmark/README.md) checks whether a model, asked to use an MCP server by name, finds and uses it through code mode without being told how (3 MCP servers, 7 models).
+
 ## What is Code Mode?
 
 When you connect multiple MCP servers to an LLM, every request includes the full schema for every tool. With 100+ tools, this means tens of thousands of tokens are spent just describing tools — before the model even starts working.
@@ -209,7 +211,6 @@ All paths and URLs are configurable via environment variables:
 | `BENCH_SQLITE_DB` | `../mcp-bifrost-sqlite/sqlite.db` | Path to SQLite database used by MCP |
 | `BIFROST_SETUP_TOKEN` | — | Sent as `X-Bifrost-Setup-Token` by `fetch-logs` while no Bifrost admin account exists |
 | `BIFROST_ADMIN_USER` / `BIFROST_ADMIN_PASSWORD` | — | Basic auth for `fetch-logs` once dashboard auth is on (takes precedence over the setup token) |
-| `BENCH_VK_WITHOUT_NOTION` | — | Virtual key without Notion, for the discovery round's restricted query (DS8); the query fails if it is unset |
 
 Example:
 
@@ -220,16 +221,7 @@ export BENCH_SQLITE_DB="/path/to/your/sqlite.db"
 
 ### Keys
 
-The benchmark never reads or stores provider keys. It sends requests to your Bifrost, and Bifrost calls the providers with the keys configured in it. Set them up once in Bifrost (UI, or `config.json` with `"value": "env.ANTHROPIC_API_KEY"`) for every model you want to run:
-
-| Models | Provider key in Bifrost |
-|--------|-------------------------|
-| `anthropic/*` | `ANTHROPIC_API_KEY` |
-| `openai/*` | `OPENAI_API_KEY` |
-| `gemini/*` | `GEMINI_API_KEY` |
-| `bedrock_mantle/*` | AWS access key, secret key and region (`bedrock_mantle_key_config`) |
-
-The MCP servers' own credentials (Notion token, Tavily key, Firecrawl key, ...) are also configured in Bifrost; see [MCP Servers](#mcp-servers). The shell only needs the variables in the table above, all of which point at Bifrost.
+The benchmark never reads or stores provider or MCP keys. It sends requests to your Bifrost, and Bifrost calls the providers and MCP servers with the keys configured in it (UI, or `config.json` with `"value": "env.ANTHROPIC_API_KEY"`). The shell only needs the variables in the table above, all of which point at Bifrost.
 
 ## MCP Servers
 
@@ -344,32 +336,20 @@ Fetches full agent loop conversation logs from Bifrost's API and saves per-query
 
 ### OK vs Discovered
 
-`run` marks a query "OK" when Bifrost answers with HTTP 200. It says the request went through, not that the task was done: a model that replies "I can't reach Notion" without trying is OK. The Pass Rate figures in the results above are this number. Once logs are fetched, `summary` also prints a DISCOVERED table, read from the agent loop in each query's log. It answers the question code mode discovery is about: did the model find the server it needed through code mode, without being told it was there?
-
-| Column | Meaning |
-|--------|---------|
-| Found | Every `expected_servers` entry was found through code mode: its file was read with `readToolFile` / `getToolDocs`, or `executeToolCode` called it. What happens after that does not count against the model: a tool that fails on a bad key, an auth error or a provider error still means the server was found. A query run under a key that cannot reach a server (`unavailable_server`) passes when the model never tries to use that server (no call, module or file named after it) and answers; using the servers the key does reach is fine. A request that failed before the model did anything (an upstream timeout) is left out and listed as such. |
-| Turns | Model calls in the agent loop. The intended code mode flow (`listToolFiles`, `readToolFile`, `executeToolCode`, answer) takes 3-4. |
-| Discovery | `listToolFiles` / `readToolFile` / `getToolDocs` calls before the first `executeToolCode`. |
-| Tool calls | All tool calls in the agent loop; 0 means the model never used a tool. |
-| Errors | The "server is not connected" failures, for diagnosis: a tool name Bifrost does not serve, such as `ListToolFiles` for `listToolFiles` or the server's name called as if it were a tool (Bifrost leaves it unexecuted and the loop stops), a call answered "not permitted", or code naming an expected server the sandbox does not bind (`undefined: Notion` when the client is `notion`). |
-
-A server counts as called when `executeToolCode` code calls one of its tools (`notion.search(...)`; code mode binds each server as a module named after the Bifrost client), or when a `<server>-<tool>` tool is called directly (code mode off). Names are compared case-insensitively, so the Bifrost client names must match `expected_servers`. A query with no matched log is listed as unscored, never as found.
+`run` marks a query "OK" when Bifrost answers with HTTP 200: the request went through, not that the task was done. The Pass Rate figures in the results above are this number. Once logs are fetched, `summary` also prints a DISCOVERED table, read from the agent loop in each query's log, showing whether each query reached its expected servers through code mode; its columns and scoring rules are described in the [code mode discovery benchmark](discovery-benchmark/README.md#how-a-query-is-scored).
 
 ### Several models
 
 `--model` takes several values. Each model runs into `runs/<name>/<model>/`, and `summary --name <name>` (also printed at the end of the run) compares them on the same queries. With `--parallel`, each model runs in its own process at the same time and writes its live output to `runs/<name>/<model>/run.log`; when all finish, the logs are fetched once more:
 
 ```bash
-python benchmark.py run --name disc_matrix --eval-file eval_tasks/eval_tasks_discovery.json --system-message neutral --parallel \
-  --model anthropic/claude-opus-5-5 openai/gpt-6.2-sol \
-          anthropic/claude-haiku-5-5 gemini/gemini-3.8-flash bedrock_mantle/qwen.qwen3-coder-next \
-          anthropic/claude-sonnet-4-6 gemini/gemini-3.1-pro-preview
-python benchmark.py summary --name disc_matrix                  # one row per model
-python benchmark.py summary --name disc_matrix/claude-haiku-5-5 # one run in full
+python benchmark.py run --name r3_models --eval-file eval_tasks/eval_tasks_r3.json --parallel \
+  --model anthropic/claude-sonnet-4-6 anthropic/claude-opus-4-6 openai/gpt-5.4
+python benchmark.py summary --name r3_models                   # one row per model
+python benchmark.py summary --name r3_models/claude-sonnet-4-6 # one run in full
 ```
 
-Every request is sent with `reasoning_effort: medium`, which Bifrost maps to each provider's own setting; Bifrost drops it for models without reasoning (for example `openai/gpt-4o`), so those run at their default. `fetch-logs --name disc_matrix` re-fetches every run's logs.
+Every request is sent with `reasoning_effort: medium`, which Bifrost maps to each provider's own setting; Bifrost drops it for models without reasoning (for example `openai/gpt-4o`), so those run at their default. `fetch-logs --name r3_models` re-fetches every run's logs.
 
 ## Supported Models
 
@@ -381,18 +361,6 @@ Other tested models:
 anthropic/claude-opus-4-6
 openai/gpt-5.4
 gemini/gemini-3.1-pro
-```
-
-Discovery round models, each run at `medium` reasoning effort:
-
-```
-anthropic/claude-opus-5-5
-openai/gpt-6.2-sol
-anthropic/claude-haiku-5-5
-gemini/gemini-3.8-flash
-bedrock_mantle/qwen.qwen3-coder-next
-anthropic/claude-sonnet-4-6
-gemini/gemini-3.1-pro-preview
 ```
 
 ## Eval Query Design
@@ -424,86 +392,9 @@ Round 2 covers 11 servers: Apollo, FileSystem, Firecrawl, GitHub, Google Sheets,
 
 Round 3 adds 5 new servers: Google Calendar, Google Drive, Google Docs, Calendly, Figma.
 
-### Discovery (`eval_tasks/eval_tasks_discovery.json`)
+### Code mode discovery (`discovery-benchmark/eval_tasks.json`)
 
-8 queries that test whether a model, asked to use a server by name, works out that the server is connected only through code mode and uses it there, without being told how, across 3 MCP servers and 7 models. The servers are connected only in code mode, so their tools are not in the model's tool list: the model can reach them only through `listToolFiles`, `readToolFile` and `executeToolCode`. All three need a key, so a model cannot get the answer some other way. The round runs with `--system-message neutral`, which names no server, so what the model knows about them comes from Bifrost: the code mode catalogue in the `listToolFiles` description and the pointer line in the system message.
-
-**MCP servers** (client names as used by the queries):
-
-| Client | Server | Key | Description in Bifrost |
-|--------|--------|-----|------------------------|
-| `notion` | `@notionhq/notion-mcp-server@2.6.1` (stdio) | `NOTION_TOKEN` | Team workspace docs: wiki pages, notes and databases |
-| `tavily` | `tavily-mcp@0.2.22` (stdio) | `TAVILY_API_KEY` | Web search for current news and answers |
-| `firecrawl` | `firecrawl-mcp@3.41.0` (stdio) | `FIRECRAWL_API_KEY` | none: only its tool names describe it |
-
-```json
-"mcp": {
-  "client_configs": [
-    {"name": "notion", "description": "Team workspace docs: wiki pages, notes and databases",
-     "connection_type": "stdio", "stdio_config": {"command": "npx", "args": ["-y", "@notionhq/notion-mcp-server@2.6.1"], "envs": ["NOTION_TOKEN"]},
-     "is_code_mode_client": true, "tools_to_execute": ["*"], "tools_to_auto_execute": ["*"]},
-    {"name": "tavily", "description": "Web search for current news and answers",
-     "connection_type": "stdio", "stdio_config": {"command": "npx", "args": ["-y", "tavily-mcp@0.2.22"], "envs": ["TAVILY_API_KEY"]},
-     "is_code_mode_client": true, "tools_to_execute": ["*"], "tools_to_auto_execute": ["*"]},
-    {"name": "firecrawl",
-     "connection_type": "stdio", "stdio_config": {"command": "npx", "args": ["-y", "firecrawl-mcp@3.41.0"], "envs": ["FIRECRAWL_API_KEY"]},
-     "is_code_mode_client": true, "tools_to_execute": ["*"], "tools_to_auto_execute": ["*"]}
-  ]
-}
-```
-
-`envs` names the variables Bifrost passes from its own environment, so start Bifrost with `NOTION_TOKEN`, `TAVILY_API_KEY` and `FIRECRAWL_API_KEY` set. Share a few Notion pages with the integration. Create two virtual keys: one that reaches all three servers (`BIFROST_API_KEY`) and one that reaches Tavily and Firecrawl only (`BENCH_VK_WITHOUT_NOTION`).
-
-**Models**, each at `medium` reasoning effort: `anthropic/claude-opus-5-5`, `openai/gpt-6.2-sol`, `anthropic/claude-haiku-5-5`, `gemini/gemini-3.8-flash`, `bedrock_mantle/qwen.qwen3-coder-next`, `anthropic/claude-sonnet-4-6`, `gemini/gemini-3.1-pro-preview`.
-
-**Queries:**
-
-| Queries | What it checks |
-|---------|----------------|
-| DS1, DS6 | Tavily searches |
-| DS2, DS4 | Notion workspace pages and search |
-| DS3, DS5 | Firecrawl scrape and site map |
-| DS7 | Tavily and Notion in one request |
-| DS8 | A Notion question under a key without Notion; the model must not try to use Notion |
-
-Every query names the server it needs, as a user would ("Use Tavily to…", "our Notion workspace"), and none says that the server is in code mode or how to reach it: finding that out is what is measured.
-
-```bash
-export BIFROST_BASE_URL=http://localhost:8080/openai BIFROST_API_KEY=<key with all three servers> BENCH_VK_WITHOUT_NOTION=<key without notion>
-export BIFROST_SETUP_TOKEN=<setup token>   # or BIFROST_ADMIN_USER / BIFROST_ADMIN_PASSWORD
-python benchmark.py run --name discovery --eval-file eval_tasks/eval_tasks_discovery.json --system-message neutral --parallel \
-  --model anthropic/claude-opus-5-5 openai/gpt-6.2-sol anthropic/claude-haiku-5-5 gemini/gemini-3.8-flash \
-          bedrock_mantle/qwen.qwen3-coder-next anthropic/claude-sonnet-4-6 gemini/gemini-3.1-pro-preview
-python benchmark.py summary --name discovery
-```
-
-That is 7 runs of 8 queries, one process per model. To measure a Bifrost change, run the same command against the gateway before and after it and compare the two `summary` tables: discovered, average turns, and Errors.
-
-### Discovery Results
-
-Tested on 3 MCP servers (Notion, Tavily, Firecrawl, all connected only through code mode) and 7 models at `medium` reasoning effort, with the neutral system message, on Bifrost with the code mode catalogue ([maximhq/bifrost#10228](https://github.com/maximhq/bifrost/pull/10228)), November 2026. "Discovered" is out of 8 queries; Turns is the average number of model calls per query.
-
-The three MCP servers as connected in Bifrost for this run, each with Code Mode enabled (Notion on one virtual key; Tavily and Firecrawl on both, including the key without Notion used by DS8):
-
-![MCP Server Catalog: notion, tavily and firecrawl, all with Code Mode enabled](discovery_mcp_servers.png)
-
-The seven models and their four providers in the same Bifrost, with the traffic from the runs:
-
-![Model Catalog: Anthropic, AWS Bedrock Mantle, Gemini and OpenAI with the seven benchmarked models](discovery_models.png)
-
-| Model | Discovered | Avg turns | Errors |
-|-------|------------|-----------|--------|
-| `anthropic/claude-opus-5-5` | 8/8 | 3.9 | 0 |
-| `openai/gpt-6.2-sol` | 8/8 | 5.5 | 0 |
-| `anthropic/claude-haiku-5-5` | 8/8 | 4.2 | 0 |
-| `gemini/gemini-3.8-flash` | 8/8 | 5.9 | 1 |
-| `bedrock_mantle/qwen.qwen3-coder-next` | 8/8 | 5.8 | 1 |
-| `anthropic/claude-sonnet-4-6` | 8/8 | 4.2 | 0 |
-| `gemini/gemini-3.1-pro-preview` | 8/8 | 4.1 | 0 |
-
-Every request completed, and every model reached the server each query named through code mode, without being told the server was in code mode or how to use it. Under the key without Notion (DS8), every model said Notion was not available to it and did not try to use it.
-
-Qwen3 Coder Next called a server's name as if it were a tool in four queries (DS1, DS4, DS6, DS7). Bifrost answered each such call with how to reach that server through code mode, and Qwen then used it through `executeToolCode`. The Errors column counts calls that failed as unavailable and were then corrected in the same query.
+8 queries on Notion, Tavily and Firecrawl that check whether a model finds and uses a server reachable only through code mode. The setup, queries, scoring and results are in [discovery/README.md](discovery-benchmark/README.md).
 
 Each query specifies:
 
@@ -526,13 +417,15 @@ Each query specifies:
 ├── benchmark.py          # Benchmark runner (run, cleanup, summary, fetch-logs)
 ├── benchmark_report.md   # Full comparison results across all rounds
 ├── mcp_catalog.png       # Screenshot of Bifrost MCP server catalog
-├── discovery_mcp_servers.png # Discovery round: Notion, Tavily, Firecrawl in code mode
-├── discovery_models.png  # Discovery round: the seven models in Bifrost
+├── discovery-benchmark/  # Code mode discovery benchmark (its own README, queries and results)
+│   ├── README.md
+│   ├── eval_tasks.json   # 8 queries on Notion, Tavily and Firecrawl
+│   ├── mcp_servers.png   # The three MCP servers in code mode
+│   └── models.png        # The seven models
 ├── eval_tasks/           # Benchmark query sets by round
 │   ├── eval_tasks.json   # Round 1: 64 eval query definitions (96 tools)
 │   ├── eval_tasks_r2.json # Round 2: 65 eval queries (251 tools)
-│   ├── eval_tasks_r3.json # Round 3: 65 eval queries (508 tools)
-│   └── eval_tasks_discovery.json # Discovery: 10 queries, run with --system-message neutral
+│   └── eval_tasks_r3.json # Round 3: 65 eval queries (508 tools)
 ├── mcp_tools/            # Tool inventories by round
 │   ├── round1.json       # Round 1: 96 tools
 │   ├── round2.json       # Round 2: 251 tools
